@@ -5,7 +5,7 @@
 This document tracks the implementation status of Penumbra Phase 1 (MVP). The work is organized by milestone and includes both completed components and next steps.
 
 **As of:** 2026-07-07  
-**Status:** Foundations and core systems complete; API/UI work begins  
+**Status:** Foundations and core systems complete and verified end-to-end (full build/test pass); API/UI work begins  
 **Commits shipped:** 9
 
 ## Completed milestones
@@ -29,7 +29,7 @@ This document tracks the implementation status of Penumbra Phase 1 (MVP). The wo
 - Single-threaded deterministic evaluation (canonical mode)
 - Append-only data model for eval history (archaeology)
 
-### ✅ M1: Certificate + Verifier (3 weeks, 90% complete)
+### ✅ M1: Certificate + Verifier (3 weeks, complete and verified)
 
 **Objective:** Define proof certificate format; build verifier CLI.
 
@@ -45,9 +45,10 @@ This document tracks the implementation status of Penumbra Phase 1 (MVP). The wo
   - Golden test certificate (KQPK, 4-piece tablebase)
   - Mutation tests (missing child node, cycle in win)
 - `verifier verify cert.pnbcert [--syzygy DIR | --offline]` command
+- Integration test suite (`rust/verifier/tests/verify_certificates.rs`) wired into `cargo test`: golden certificate verifies clean, both mutation certs fail with the expected errors, unsupported format versions are rejected
+- CLI now exits 0 on a valid certificate and 1 on an invalid one (previously always exited 0 regardless of validity)
 
 **Still needed:**
-- Integration test harness (verify golden passes, mutations fail with correct exit codes)
 - External spec review and public announcement
 
 ### ✅ M3: Fog Index v0.1 (partial, ~4 weeks)
@@ -73,15 +74,16 @@ This document tracks the implementation status of Penumbra Phase 1 (MVP). The wo
 
 **Delivered:**
 - `packages/db`: Drizzle ORM schema
-- Append-only tables for `evals` and `fog_scores` (trigger enforced)
+- Append-only tables for `evals` and `fog_scores` (trigger enforcement still to be written as a migration)
 - Positions table with Zobrist indexing (EPD is truth key)
 - Games, game_positions, proofs, ledger_entries, users, api_keys
 - Indexes for common queries (zobrist, game_id, position_id, timestamp)
-- Drizzle configuration for migrations
+- Initial migration generated (`packages/db/migrations/0000_*.sql`, 11 tables) via `pnpm run db:generate`
 
 **Still needed:**
-- Migration generation and testing
-- Database initialization scripts
+- Apply migration against a running Postgres instance and confirm it lands cleanly (generation verified; live-DB apply not yet run in this environment)
+- Append-only enforcement triggers (UPDATE/DELETE blockers on `evals`/`fog_scores`) as a follow-up migration
+- Database initialization/seed scripts
 
 ## In-progress and next steps
 
@@ -166,7 +168,7 @@ penumbra/
 
 ## Verification checklist (per milestone)
 
-- [ ] M1: Golden test suite green; mutations fail with correct exit codes
+- [x] M1: Golden test suite green; mutations fail with correct exit codes (`cargo test` in `rust/`, 4/4 passing; CLI exit codes confirmed manually)
 - [ ] M2: ~10 fortress certs generated and verified end-to-end
 - [ ] M3: Fog reproducibility test (same FEN twice → byte-identical score)
 - [ ] M4: Import real Lichess game → analyze → fog timeline renders
@@ -180,7 +182,18 @@ penumbra/
 - Configuration lives in untracked `.claude/` (outside repo)
 - Run `docker-compose -f infra/docker-compose.yml up -d` for local services
 - Run `pnpm install && pnpm build` to build all packages
-- Run `cargo build --release` in `rust/` for verifier CLI
+- Run `cargo build && cargo test` in the repo root to build/test the verifier and prover (Cargo workspace covers both)
+- Run `pnpm run db:generate` / `db:migrate` / `db:push` / `db:studio` from the repo root to manage the database schema (`drizzle-kit` reads `drizzle.config.ts` at the root)
+- First full toolchain verification pass done 2026-07-07: `pnpm install`, `pnpm build` (all 5 TS packages), `cargo build`, `cargo test` (4/4) all green from a clean environment. Several latent bugs caught and fixed in the process (see below).
+
+### Bugs found and fixed during first full build/test pass
+
+- `packages/core`: `chessops` was pinned to a nonexistent `^0.20.0`; corrected to `^0.15.0` and fixed the corresponding API usage (`parseFen`/`makeFen` live under `chessops/fen`, not the package root; `Result.isErr`/`.value` are properties, not methods; castling-rights derivation was reading a nonexistent `setup.castles.king/.queen` instead of the real `setup.castlingRights: SquareSet`).
+- Every package's `tsconfig.json` extended `@penumbra/config/tsconfig`, but none of them declared `@penumbra/config` as a dependency — pnpm never linked it, so TypeScript silently fell back to default (pre-ES2020) compiler options and cascaded into dozens of spurious errors. Added the missing devDependency to `core`, `cert-schema`, `db`, and `fog`.
+- `turbo.json` used the v2 `tasks` schema while `package.json` pinned turbo `^1.10.0` (v1, `pipeline` schema); bumped to turbo `^2.0.0` and added the `packageManager` field v2 requires.
+- `rust/verifier`'s `CertificateMetadata` struct required a `format_version` field that doesn't belong on `metadata` (it's already on the top-level certificate, and no fixture or spec example includes it there) — every certificate failed to parse. Removed it and added the spec's actual optional `contributors`/`work_units` fields.
+- `penumbra-verify`'s `main()` always returned `Ok(())` regardless of verification outcome, so the CLI exited 0 even for an invalid certificate. Now returns `ExitCode::SUCCESS`/`FAILURE` based on `report.valid`.
+- `drizzle-kit`/`drizzle-orm` were pinned to versions (`0.20`/`0.30`) predating the unified CLI the scripts assumed (`generate`/`migrate`/`push`/`drop`/`studio`); bumped to `drizzle-kit ^0.24.0` / `drizzle-orm ^0.33.0` and moved the DB scripts to the root `package.json` (drizzle-kit resolves config-relative paths against the process cwd, not the config file's location, so it has to run from the repo root where `drizzle.config.ts` lives).
 
 ---
 
