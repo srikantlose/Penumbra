@@ -1,0 +1,27 @@
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Dependencies
+node_modules/
+dist/
+build/
+target/
+
+# Environment & config
+.env
+.env.local
+*.local.json
+.claude/
+
+# Local docs (untracked context)
+CLAUDE.md
+
+# Temporary
+*.tmp
+.turbo/
+.pnpm-store/
