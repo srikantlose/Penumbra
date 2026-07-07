@@ -1,0 +1,165 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Penumbra Certificate v0.1",
+  "description": "Machine-verifiable proof certificate for chess positions",
+  "type": "object",
+  "required": [
+    "format_version",
+    "claim",
+    "rules",
+    "root_id",
+    "nodes",
+    "dependencies",
+    "metadata"
+  ],
+  "properties": {
+    "format_version": {
+      "type": "string",
+      "const": "0.1",
+      "description": "Certificate format version"
+    },
+    "claim": {
+      "type": "object",
+      "required": ["fen", "zobrist", "value", "side"],
+      "properties": {
+        "fen": {
+          "type": "string",
+          "description": "FEN position string (full board state)"
+        },
+        "zobrist": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{16}$",
+          "description": "Polyglot Zobrist hash (hex string)"
+        },
+        "value": {
+          "type": "string",
+          "enum": ["win", "at_least_draw"],
+          "description": "Claim type: win for side-to-move or at_least_draw (fortress)"
+        },
+        "side": {
+          "type": "string",
+          "enum": ["white", "black"],
+          "description": "The side for which the claim holds"
+        }
+      }
+    },
+    "rules": {
+      "type": "string",
+      "const": "standard",
+      "description": "Chess rules set (standard FIDE rules)"
+    },
+    "root_id": {
+      "type": "string",
+      "description": "ID of the root node in the proof tree"
+    },
+    "nodes": {
+      "type": "array",
+      "description": "Nodes of the AND/OR proof tree",
+      "items": {
+        "type": "object",
+        "required": ["id", "zobrist", "to_move", "kind"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique node identifier"
+          },
+          "zobrist": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{16}$",
+            "description": "Position hash at this node"
+          },
+          "to_move": {
+            "type": "string",
+            "enum": ["white", "black"],
+            "description": "Side to move"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["or-node", "and-node", "terminal"],
+            "description": "Node type: or-node (claiming side moves, provides one move), and-node (opponent moves, must cover all), terminal (end of search)"
+          },
+          "moves": {
+            "type": "array",
+            "description": "Legal moves from this position (for non-terminal nodes)",
+            "items": {
+              "type": "object",
+              "required": ["uci", "child_id"],
+              "properties": {
+                "uci": {
+                  "type": "string",
+                  "pattern": "^[a-h][1-8][a-h][1-8]([qrbn])?$",
+                  "description": "Move in UCI notation"
+                },
+                "child_id": {
+                  "type": "string",
+                  "description": "Child node ID after this move"
+                }
+              }
+            }
+          },
+          "terminal": {
+            "type": "object",
+            "description": "Terminal information (only for terminal nodes)",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["checkmate", "stalemate", "tablebase", "transposition"],
+                "description": "Terminal type"
+              },
+              "value": {
+                "type": "string",
+                "enum": ["win", "draw", "loss"],
+                "description": "Outcome at this terminal (optional for tablebase/transposition)"
+              },
+              "dtm": {
+                "type": "integer",
+                "description": "Distance to mate (for tablebase terminals)"
+              }
+            }
+          }
+        }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "description": "External dependencies for verification",
+      "properties": {
+        "tablebase": {
+          "type": "string",
+          "enum": ["syzygy"],
+          "description": "Tablebase system required (if any)"
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["producer", "timestamp"],
+      "description": "Certificate metadata (outside verification boundary)",
+      "properties": {
+        "producer": {
+          "type": "string",
+          "description": "Name/ID of the certificate producer"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When certificate was generated"
+        },
+        "contributors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Contributing compute/entities"
+        },
+        "work_units": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Work unit IDs (for Fleet integration)"
+        }
+      }
+    }
+  }
+}

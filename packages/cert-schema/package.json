@@ -1,0 +1,27 @@
+{
+  "name": "@penumbra/cert-schema",
+  "version": "0.1.0",
+  "description": "Penumbra certificate format v0.1 schema and utilities",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./schema": "./dist/schema.json"
+  },
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "test": "node --test dist/**/*.test.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@penumbra/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist",
+    "schema.json"
+  ]
+}
