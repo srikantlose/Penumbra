@@ -6,10 +6,8 @@ import {
   json,
   timestamp,
   integer,
-  boolean,
   uniqueIndex,
   index,
-  foreignKey,
 } from 'drizzle-orm/pg-core';
 
 // Positions
