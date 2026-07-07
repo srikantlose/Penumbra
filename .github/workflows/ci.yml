@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: penumbra
+          POSTGRES_PASSWORD: penumbra
+          POSTGRES_DB: penumbra
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'pnpm'
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm type-check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test (TypeScript)
+        run: pnpm test
+        env:
+          DATABASE_URL: postgres://penumbra:penumbra@localhost/penumbra
+
+      - name: Test (Rust)
+        run: cargo test --all
+        working-directory: rust
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+        working-directory: rust
+
+      - name: Clippy
+        run: cargo clippy --all --all-targets
+        working-directory: rust
