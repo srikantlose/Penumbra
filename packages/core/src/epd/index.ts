@@ -1,4 +1,4 @@
-import { parseFen, makeFen } from 'chessops';
+import { parseFen } from 'chessops/fen';
 
 export interface EPDParts {
   piecePlacement: string;
@@ -14,18 +14,16 @@ export function normalizeEPD(fen: string): string {
   }
 
   const board = parseFen(fen);
-  if (board.isErr()) {
+  if (board.isErr) {
     throw new Error(`Invalid FEN: ${fen}`);
   }
-
-  const setup = board.value;
 
   const piecePlacement = parts[0];
   const activeColor = parts[1] as 'w' | 'b';
 
-  const castlingRights = normalizeCastling(parts[2], setup.turn);
+  const castlingRights = normalizeCastling(parts[2]);
 
-  const epTarget = normalizeEnPassant(parts[3], setup.turn);
+  const epTarget = normalizeEnPassant(parts[3]);
 
   return `${piecePlacement} ${activeColor} ${castlingRights} ${epTarget}`;
 }
@@ -41,12 +39,12 @@ export function parseFenToEPD(fen: string): EPDParts {
   };
 }
 
-function normalizeCastling(castling: string, turn: 'white' | 'black'): string {
+function normalizeCastling(castling: string): string {
   if (castling === '-') return '-';
   return castling;
 }
 
-function normalizeEnPassant(ep: string, turn: 'white' | 'black'): string {
+function normalizeEnPassant(ep: string): string {
   if (ep === '-') return '-';
 
   const file = ep.charCodeAt(0) - 97;

@@ -59,10 +59,7 @@ function computeDepthVolatility(sfWpLadder: number[]): number {
   return clamp(stdDev / 0.12, 0, 1);
 }
 
-function computeMoveCriticality(
-  multiPVMoves: number,
-  moveClosenessThreshold: number = 0.06
-): number {
+function computeMoveCriticality(multiPVMoves: number): number {
   const k = Math.max(1, Math.min(multiPVMoves, 4));
   return clamp((k - 1) / 3, 0, 1);
 }

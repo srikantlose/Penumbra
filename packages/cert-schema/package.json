@@ -18,6 +18,8 @@
     "@penumbra/core": "workspace:*"
   },
   "devDependencies": {
+    "@penumbra/config": "workspace:*",
+    "@types/node": "^20.0.0",
     "typescript": "^5.0.0"
   },
   "files": [

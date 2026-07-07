@@ -5,6 +5,7 @@
   "description": "Chess platform mapping the solved frontier",
   "author": "Srikaanth",
   "license": "UNLICENSED",
+  "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=18.0.0",
     "pnpm": ">=8.0.0"
@@ -20,9 +21,15 @@
     "test": "turbo test",
     "lint": "turbo lint",
     "type-check": "turbo type-check",
-    "clean": "turbo clean && rm -rf node_modules"
+    "clean": "turbo clean && rm -rf node_modules",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:drop": "drizzle-kit drop",
+    "db:studio": "drizzle-kit studio"
   },
   "devDependencies": {
-    "turbo": "^1.10.0"
+    "drizzle-kit": "^0.24.0",
+    "turbo": "^2.0.0"
   }
 }

@@ -1,5 +1,3 @@
-import { Certificate } from './types.js';
-
 export interface ValidationError {
   field: string;
   message: string;
@@ -51,7 +49,7 @@ export function validateCertificate(cert: any): ValidationError[] {
       path: 'nodes'
     });
   } else {
-    cert.nodes.forEach((node, i) => {
+    cert.nodes.forEach((node: any, i: number) => {
       const nodeErrors = validateNode(node);
       errors.push(
         ...nodeErrors.map(e => ({
@@ -177,7 +175,7 @@ function validateNode(node: any): ValidationError[] {
         path: 'moves'
       });
     } else {
-      node.moves.forEach((move, i) => {
+      node.moves.forEach((move: any, i: number) => {
         if (!isValidUCI(move.uci)) {
           errors.push({
             field: 'moves[].uci',

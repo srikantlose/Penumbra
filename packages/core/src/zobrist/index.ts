@@ -1,4 +1,12 @@
-import { parseFen } from 'chessops';
+import { parseFen } from 'chessops/fen';
+import { parseSquare } from 'chessops/util';
+
+const CASTLING_SQUARES = {
+  whiteKing: parseSquare('h1')!,
+  whiteQueen: parseSquare('a1')!,
+  blackKing: parseSquare('h8')!,
+  blackQueen: parseSquare('a8')!
+};
 
 const ZOBRIST_PIECE_SQUARE = initPieceSquareTable();
 const ZOBRIST_CASTLING = initCastlingTable();
@@ -41,7 +49,7 @@ function pseudoRandomBigInt(index: number): bigint {
 
 export function computeZobristHash(fen: string): bigint {
   const board = parseFen(fen);
-  if (board.isErr()) {
+  if (board.isErr) {
     throw new Error(`Invalid FEN: ${fen}`);
   }
 
@@ -56,7 +64,7 @@ export function computeZobristHash(fen: string): bigint {
     }
   }
 
-  const castlingIndex = computeCastlingIndex(setup.castles?.king ?? 0n, setup.castles?.queen ?? 0n);
+  const castlingIndex = computeCastlingIndex(setup.castlingRights);
   hash ^= ZOBRIST_CASTLING[castlingIndex];
 
   if (setup.epSquare !== undefined && setup.epSquare >= 0) {
@@ -86,12 +94,12 @@ function getPieceIndex(piece: { role: string; color: string }): number {
   return baseIndex + colorOffset;
 }
 
-function computeCastlingIndex(kingCastles: bigint, queenCastles: bigint): number {
+function computeCastlingIndex(castlingRights: { has(square: number): boolean }): number {
   let index = 0;
-  if ((kingCastles & 1n) !== 0n) index |= 1;
-  if ((kingCastles & 2n) !== 0n) index |= 2;
-  if ((queenCastles & 1n) !== 0n) index |= 4;
-  if ((queenCastles & 2n) !== 0n) index |= 8;
+  if (castlingRights.has(CASTLING_SQUARES.whiteKing)) index |= 1;
+  if (castlingRights.has(CASTLING_SQUARES.whiteQueen)) index |= 2;
+  if (castlingRights.has(CASTLING_SQUARES.blackKing)) index |= 4;
+  if (castlingRights.has(CASTLING_SQUARES.blackQueen)) index |= 8;
   return index;
 }
 

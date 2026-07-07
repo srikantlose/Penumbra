@@ -16,9 +16,10 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "chessops": "^0.20.0"
+    "chessops": "^0.15.0"
   },
   "devDependencies": {
+    "@penumbra/config": "workspace:*",
     "typescript": "^5.0.0"
   }
 }
