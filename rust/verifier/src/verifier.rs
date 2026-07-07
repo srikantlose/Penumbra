@@ -4,9 +4,12 @@ use crate::error::VerifyError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CertificateMetadata {
-  pub format_version: String,
   pub producer: String,
   pub timestamp: String,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub contributors: Option<Vec<String>>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub work_units: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

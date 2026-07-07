@@ -16,6 +16,7 @@ pub struct ProofSearchResult {
 }
 
 pub struct ProofNumberSearch {
+  #[allow(dead_code)]
   config: ProofSearchConfig,
 }
 

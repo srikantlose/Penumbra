@@ -1,7 +1,8 @@
 use clap::{Parser, Subcommand};
-use penumbra_verify::{CertificateVerifier, VerifyError};
+use penumbra_verify::CertificateVerifier;
 use std::fs;
 use std::path::PathBuf;
+use std::process::ExitCode;
 
 #[derive(Parser)]
 #[command(name = "penumbra-verify")]
@@ -32,27 +33,35 @@ enum Commands {
   },
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> ExitCode {
   let cli = Cli::parse();
 
-  match cli.command {
+  let result = match cli.command {
     Commands::Verify {
       cert_path,
       syzygy: _,
       tb_endpoint: _,
       offline: _,
-    } => {
-      verify_certificate(&cert_path)?;
+    } => verify_certificate(&cert_path),
+    Commands::Inspect { cert_path } => inspect_certificate(&cert_path),
+  };
+
+  match result {
+    Ok(valid) => {
+      if valid {
+        ExitCode::SUCCESS
+      } else {
+        ExitCode::FAILURE
+      }
     }
-    Commands::Inspect { cert_path } => {
-      inspect_certificate(&cert_path)?;
+    Err(e) => {
+      eprintln!("Error: {}", e);
+      ExitCode::FAILURE
     }
   }
-
-  Ok(())
 }
 
-fn verify_certificate(path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+fn verify_certificate(path: &PathBuf) -> Result<bool, Box<dyn std::error::Error>> {
   let content = fs::read_to_string(path)?;
 
   let verifier = CertificateVerifier::load_from_json(&content)?;
@@ -74,10 +83,10 @@ fn verify_certificate(path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> 
     }
   }
 
-  Ok(())
+  Ok(report.valid)
 }
 
-fn inspect_certificate(path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+fn inspect_certificate(path: &PathBuf) -> Result<bool, Box<dyn std::error::Error>> {
   let content = fs::read_to_string(path)?;
 
   let verifier = CertificateVerifier::load_from_json(&content)?;
@@ -90,5 +99,5 @@ fn inspect_certificate(path: &PathBuf) -> Result<(), Box<dyn std::error::Error>>
   println!("Value: {}", claim.value);
   println!("Side: {}", claim.side);
 
-  Ok(())
+  Ok(true)
 }
