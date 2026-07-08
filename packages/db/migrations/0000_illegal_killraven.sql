@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS "analyses" (
 	"id" bigserial PRIMARY KEY NOT NULL,
-	"game_id" bigserial NOT NULL,
+	"game_id" bigint NOT NULL,
 	"tier" varchar(20) NOT NULL,
 	"status" varchar(20) NOT NULL,
 	"fog_timeline" json,
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS "analyses" (
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "api_keys" (
 	"id" bigserial PRIMARY KEY NOT NULL,
-	"user_id" bigserial NOT NULL,
+	"user_id" bigint NOT NULL,
 	"key_hash" varchar(66) NOT NULL,
 	"name" varchar(255),
 	"quota" integer DEFAULT 1000 NOT NULL,
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS "api_keys" (
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "evals" (
 	"id" bigserial PRIMARY KEY NOT NULL,
-	"position_id" bigserial NOT NULL,
+	"position_id" bigint NOT NULL,
 	"engine" varchar(50) NOT NULL,
 	"engine_version" varchar(50) NOT NULL,
 	"net_id" varchar(100),
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS "evals" (
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "fog_scores" (
 	"id" bigserial PRIMARY KEY NOT NULL,
-	"position_id" bigserial NOT NULL,
+	"position_id" bigint NOT NULL,
 	"formula_version" varchar(20) NOT NULL,
 	"engine_fingerprint" varchar(66) NOT NULL,
 	"score" integer NOT NULL,
@@ -55,9 +55,9 @@ CREATE TABLE IF NOT EXISTS "fog_scores" (
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "game_positions" (
 	"id" bigserial PRIMARY KEY NOT NULL,
-	"game_id" bigserial NOT NULL,
+	"game_id" bigint NOT NULL,
 	"ply" integer NOT NULL,
-	"position_id" bigserial NOT NULL,
+	"position_id" bigint NOT NULL,
 	"uci" varchar(5),
 	"san" varchar(20),
 	"created_at" timestamp DEFAULT now() NOT NULL
@@ -71,13 +71,13 @@ CREATE TABLE IF NOT EXISTS "games" (
 	"black" varchar(255),
 	"result" varchar(10),
 	"pgn" text,
-	"imported_by_user_id" bigserial NOT NULL,
+	"imported_by_user_id" bigint,
 	"imported_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "ledger_entries" (
 	"seq" bigserial PRIMARY KEY NOT NULL,
-	"proof_id" bigserial NOT NULL,
+	"proof_id" bigint,
 	"payload" json NOT NULL,
 	"prev_hash" varchar(66),
 	"entry_hash" varchar(66) NOT NULL,
@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS "positions" (
 	"epd" varchar(256) NOT NULL,
 	"zobrist" varchar(18) NOT NULL,
 	"piece_count" integer NOT NULL,
-	"first_seen_game_id" bigserial NOT NULL,
+	"first_seen_game_id" bigint,
 	"occurrence_count" integer DEFAULT 1 NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "positions_epd_unique" UNIQUE("epd")
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS "positions" (
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "proofs" (
 	"id" bigserial PRIMARY KEY NOT NULL,
-	"position_id" bigserial NOT NULL,
+	"position_id" bigint NOT NULL,
 	"claim" json NOT NULL,
 	"value" varchar(20) NOT NULL,
 	"bound" varchar(20),
@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS "proofs" (
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "tb_probes" (
 	"id" bigserial PRIMARY KEY NOT NULL,
-	"position_id" bigserial NOT NULL,
+	"position_id" bigint NOT NULL,
 	"wdl_w" integer,
 	"wdl_d" integer,
 	"wdl_l" integer,
@@ -132,6 +132,72 @@ CREATE TABLE IF NOT EXISTS "users" (
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "users_lichess_id_unique" UNIQUE("lichess_id")
 );
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "analyses" ADD CONSTRAINT "analyses_game_id_games_id_fk" FOREIGN KEY ("game_id") REFERENCES "public"."games"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "api_keys" ADD CONSTRAINT "api_keys_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "evals" ADD CONSTRAINT "evals_position_id_positions_id_fk" FOREIGN KEY ("position_id") REFERENCES "public"."positions"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "fog_scores" ADD CONSTRAINT "fog_scores_position_id_positions_id_fk" FOREIGN KEY ("position_id") REFERENCES "public"."positions"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "game_positions" ADD CONSTRAINT "game_positions_game_id_games_id_fk" FOREIGN KEY ("game_id") REFERENCES "public"."games"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "game_positions" ADD CONSTRAINT "game_positions_position_id_positions_id_fk" FOREIGN KEY ("position_id") REFERENCES "public"."positions"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "games" ADD CONSTRAINT "games_imported_by_user_id_users_id_fk" FOREIGN KEY ("imported_by_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "ledger_entries" ADD CONSTRAINT "ledger_entries_proof_id_proofs_id_fk" FOREIGN KEY ("proof_id") REFERENCES "public"."proofs"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "positions" ADD CONSTRAINT "positions_first_seen_game_id_games_id_fk" FOREIGN KEY ("first_seen_game_id") REFERENCES "public"."games"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "proofs" ADD CONSTRAINT "proofs_position_id_positions_id_fk" FOREIGN KEY ("position_id") REFERENCES "public"."positions"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "tb_probes" ADD CONSTRAINT "tb_probes_position_id_positions_id_fk" FOREIGN KEY ("position_id") REFERENCES "public"."positions"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "analyses_game_id_idx" ON "analyses" USING btree ("game_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "api_keys_user_id_idx" ON "api_keys" USING btree ("user_id");--> statement-breakpoint

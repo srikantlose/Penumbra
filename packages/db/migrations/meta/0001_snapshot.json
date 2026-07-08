@@ -1,6 +1,6 @@
 {
-  "id": "21975b57-ff2f-4f1a-8315-c915168fd0e0",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "80b11d60-7ba3-45c0-bdb6-de7e9c2a782f",
+  "prevId": "21975b57-ff2f-4f1a-8315-c915168fd0e0",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -82,24 +82,24 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "analyses_game_id_games_id_fk": {
           "name": "analyses_game_id_games_id_fk",
           "tableFrom": "analyses",
-          "tableTo": "games",
           "columnsFrom": [
             "game_id"
           ],
+          "tableTo": "games",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -173,34 +173,34 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "api_keys_user_id_users_id_fk": {
           "name": "api_keys_user_id_users_id_fk",
           "tableFrom": "api_keys",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "api_keys_key_hash_unique": {
           "name": "api_keys_key_hash_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "key_hash"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       }
     },
@@ -318,9 +318,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "evals_fingerprint_idx": {
           "name": "evals_fingerprint_idx",
@@ -339,24 +339,24 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "evals_position_id_positions_id_fk": {
           "name": "evals_position_id_positions_id_fk",
           "tableFrom": "evals",
-          "tableTo": "positions",
           "columnsFrom": [
             "position_id"
           ],
+          "tableTo": "positions",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -440,9 +440,9 @@
             }
           ],
           "isUnique": true,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "fog_scores_created_idx": {
           "name": "fog_scores_created_idx",
@@ -455,24 +455,24 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "fog_scores_position_id_positions_id_fk": {
           "name": "fog_scores_position_id_positions_id_fk",
           "tableFrom": "fog_scores",
-          "tableTo": "positions",
           "columnsFrom": [
             "position_id"
           ],
+          "tableTo": "positions",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -538,9 +538,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "game_positions_position_id_idx": {
           "name": "game_positions_position_id_idx",
@@ -553,37 +553,37 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "game_positions_game_id_games_id_fk": {
           "name": "game_positions_game_id_games_id_fk",
           "tableFrom": "game_positions",
-          "tableTo": "games",
           "columnsFrom": [
             "game_id"
           ],
+          "tableTo": "games",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "game_positions_position_id_positions_id_fk": {
           "name": "game_positions_position_id_positions_id_fk",
           "tableFrom": "game_positions",
-          "tableTo": "positions",
           "columnsFrom": [
             "position_id"
           ],
+          "tableTo": "positions",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -667,24 +667,24 @@
             }
           ],
           "isUnique": true,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "games_imported_by_user_id_users_id_fk": {
           "name": "games_imported_by_user_id_users_id_fk",
           "tableFrom": "games",
-          "tableTo": "users",
           "columnsFrom": [
             "imported_by_user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -744,34 +744,34 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "ledger_entries_proof_id_proofs_id_fk": {
           "name": "ledger_entries_proof_id_proofs_id_fk",
           "tableFrom": "ledger_entries",
-          "tableTo": "proofs",
           "columnsFrom": [
             "proof_id"
           ],
+          "tableTo": "proofs",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "ledger_entries_entry_hash_unique": {
           "name": "ledger_entries_entry_hash_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "entry_hash"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       }
     },
@@ -836,34 +836,34 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "positions_first_seen_game_id_games_id_fk": {
           "name": "positions_first_seen_game_id_games_id_fk",
           "tableFrom": "positions",
-          "tableTo": "games",
           "columnsFrom": [
             "first_seen_game_id"
           ],
+          "tableTo": "games",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "positions_epd_unique": {
           "name": "positions_epd_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "epd"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       }
     },
@@ -952,9 +952,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "proofs_sha256_idx": {
           "name": "proofs_sha256_idx",
@@ -967,34 +967,34 @@
             }
           ],
           "isUnique": true,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "proofs_position_id_positions_id_fk": {
           "name": "proofs_position_id_positions_id_fk",
           "tableFrom": "proofs",
-          "tableTo": "positions",
           "columnsFrom": [
             "position_id"
           ],
+          "tableTo": "positions",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "proofs_certificate_sha256_unique": {
           "name": "proofs_certificate_sha256_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "certificate_sha256"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       }
     },
@@ -1057,25 +1057,25 @@
         "tb_probes_position_id_positions_id_fk": {
           "name": "tb_probes_position_id_positions_id_fk",
           "tableFrom": "tb_probes",
-          "tableTo": "positions",
           "columnsFrom": [
             "position_id"
           ],
+          "tableTo": "positions",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "tb_probes_position_id_unique": {
           "name": "tb_probes_position_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "position_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       }
     },
@@ -1133,9 +1133,9 @@
             }
           ],
           "isUnique": true,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {},
@@ -1143,10 +1143,10 @@
       "uniqueConstraints": {
         "users_lichess_id_unique": {
           "name": "users_lichess_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "lichess_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       }
     }

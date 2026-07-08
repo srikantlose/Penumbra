@@ -1,6 +1,7 @@
 import {
   pgTable,
   bigserial,
+  bigint,
   varchar,
   text,
   json,
@@ -10,20 +11,19 @@ import {
   index,
 } from 'drizzle-orm/pg-core';
 
-// Positions
-export const positions = pgTable(
-  'positions',
+// Users
+export const users = pgTable(
+  'users',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    epd: varchar('epd', { length: 256 }).notNull().unique(),
-    zobrist: varchar('zobrist', { length: 18 }).notNull(),
-    pieceCount: integer('piece_count').notNull(),
-    firstSeenGameId: bigserial('first_seen_game_id', { mode: 'number' }),
-    occurrenceCount: integer('occurrence_count').notNull().default(1),
+    lichessId: varchar('lichess_id', { length: 255 }).unique(),
+    lichessUsername: varchar('lichess_username', { length: 255 }),
+    chesscomUsername: varchar('chesscom_username', { length: 255 }),
+    oauthTokens: text('oauth_tokens'), // JSON, encrypted at rest
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   (table) => ({
-    zobristIdx: index('positions_zobrist_idx').on(table.zobrist),
+    lichessIdx: uniqueIndex('users_lichess_id_idx').on(table.lichessId),
   })
 );
 
@@ -38,7 +38,7 @@ export const games = pgTable(
     black: varchar('black', { length: 255 }),
     result: varchar('result', { length: 10 }), // '1-0', '0-1', '1/2-1/2'
     pgn: text('pgn'),
-    importedByUserId: bigserial('imported_by_user_id', { mode: 'number' }),
+    importedByUserId: bigint('imported_by_user_id', { mode: 'number' }).references(() => users.id),
     importedAt: timestamp('imported_at').notNull().defaultNow(),
   },
   (table) => ({
@@ -49,14 +49,31 @@ export const games = pgTable(
   })
 );
 
+// Positions
+export const positions = pgTable(
+  'positions',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    epd: varchar('epd', { length: 256 }).notNull().unique(),
+    zobrist: varchar('zobrist', { length: 18 }).notNull(),
+    pieceCount: integer('piece_count').notNull(),
+    firstSeenGameId: bigint('first_seen_game_id', { mode: 'number' }).references(() => games.id),
+    occurrenceCount: integer('occurrence_count').notNull().default(1),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => ({
+    zobristIdx: index('positions_zobrist_idx').on(table.zobrist),
+  })
+);
+
 // Game positions (move sequence)
 export const gamePositions = pgTable(
   'game_positions',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    gameId: bigserial('game_id', { mode: 'number' }).notNull(),
+    gameId: bigint('game_id', { mode: 'number' }).notNull().references(() => games.id),
     ply: integer('ply').notNull(),
-    positionId: bigserial('position_id', { mode: 'number' }).notNull(),
+    positionId: bigint('position_id', { mode: 'number' }).notNull().references(() => positions.id),
     uci: varchar('uci', { length: 5 }),
     san: varchar('san', { length: 20 }),
     createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -72,7 +89,7 @@ export const evals = pgTable(
   'evals',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    positionId: bigserial('position_id', { mode: 'number' }).notNull(),
+    positionId: bigint('position_id', { mode: 'number' }).notNull().references(() => positions.id),
     engine: varchar('engine', { length: 50 }).notNull(), // 'stockfish', 'lc0'
     engineVersion: varchar('engine_version', { length: 50 }).notNull(),
     netId: varchar('net_id', { length: 100 }),
@@ -102,7 +119,7 @@ export const fogScores = pgTable(
   'fog_scores',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    positionId: bigserial('position_id', { mode: 'number' }).notNull(),
+    positionId: bigint('position_id', { mode: 'number' }).notNull().references(() => positions.id),
     formulaVersion: varchar('formula_version', { length: 20 }).notNull(),
     engineFingerprint: varchar('engine_fingerprint', { length: 66 }).notNull(),
     score: integer('score').notNull(),
@@ -125,7 +142,7 @@ export const tbProbes = pgTable(
   'tb_probes',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    positionId: bigserial('position_id', { mode: 'number' }).notNull().unique(),
+    positionId: bigint('position_id', { mode: 'number' }).notNull().unique().references(() => positions.id),
     wdlW: integer('wdl_w'),
     wdlD: integer('wdl_d'),
     wdlL: integer('wdl_l'),
@@ -140,7 +157,7 @@ export const proofs = pgTable(
   'proofs',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    positionId: bigserial('position_id', { mode: 'number' }).notNull(),
+    positionId: bigint('position_id', { mode: 'number' }).notNull().references(() => positions.id),
     claim: json('claim').notNull(),
     value: varchar('value', { length: 20 }).notNull(), // 'win', 'draw'
     bound: varchar('bound', { length: 20 }), // 'at_least_draw', etc.
@@ -162,7 +179,7 @@ export const ledgerEntries = pgTable(
   'ledger_entries',
   {
     seq: bigserial('seq', { mode: 'number' }).primaryKey(),
-    proofId: bigserial('proof_id', { mode: 'number' }),
+    proofId: bigint('proof_id', { mode: 'number' }).references(() => proofs.id),
     payload: json('payload').notNull(),
     prevHash: varchar('prev_hash', { length: 66 }),
     entryHash: varchar('entry_hash', { length: 66 }).notNull().unique(),
@@ -173,28 +190,12 @@ export const ledgerEntries = pgTable(
   })
 );
 
-// Users
-export const users = pgTable(
-  'users',
-  {
-    id: bigserial('id', { mode: 'number' }).primaryKey(),
-    lichessId: varchar('lichess_id', { length: 255 }).unique(),
-    lichessUsername: varchar('lichess_username', { length: 255 }),
-    chesscomUsername: varchar('chesscom_username', { length: 255 }),
-    oauthTokens: text('oauth_tokens'), // JSON, encrypted at rest
-    createdAt: timestamp('created_at').notNull().defaultNow(),
-  },
-  (table) => ({
-    lichessIdx: uniqueIndex('users_lichess_id_idx').on(table.lichessId),
-  })
-);
-
 // Analyses
 export const analyses = pgTable(
   'analyses',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    gameId: bigserial('game_id', { mode: 'number' }).notNull(),
+    gameId: bigint('game_id', { mode: 'number' }).notNull().references(() => games.id),
     tier: varchar('tier', { length: 20 }).notNull(), // 'quick', 'deep'
     status: varchar('status', { length: 20 }).notNull(), // 'queued', 'running', 'done'
     fogTimeline: json('fog_timeline'),
@@ -214,7 +215,7 @@ export const apiKeys = pgTable(
   'api_keys',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    userId: bigserial('user_id', { mode: 'number' }).notNull(),
+    userId: bigint('user_id', { mode: 'number' }).notNull().references(() => users.id),
     keyHash: varchar('key_hash', { length: 66 }).notNull().unique(),
     name: varchar('name', { length: 255 }),
     quota: integer('quota').notNull().default(1000),

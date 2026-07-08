@@ -435,7 +435,7 @@ say so in the commit body.
 
 **Tasks:**
 
-- [ ] In `packages/db/src/schema.ts`, change to `bigint('col_name', { mode: 'number' })` with
+- [x] In `packages/db/src/schema.ts`, change to `bigint('col_name', { mode: 'number' })` with
   `.references(() => table.id)`:
   `positions.first_seen_game_id → games.id` (nullable),
   `games.imported_by_user_id → users.id` (nullable),
@@ -444,14 +444,23 @@ say so in the commit body.
   `tb_probes.position_id` (notNull), `proofs.position_id` (notNull),
   `ledger_entries.proof_id → proofs.id` (nullable), `analyses.game_id → games.id` (notNull),
   `api_keys.user_id → users.id` (notNull).
-  Watch declaration order for forward references (`positions` ↔ `games` are mutually
-  referential — use the drizzle callback form `references(() => games.id)` which tolerates it;
-  if TS circularity bites, type the column builder explicitly with
-  `AnyPgColumn` as drizzle docs prescribe).
-- [ ] `evals.nodes`: `integer` → `bigint({ mode: 'number' })` (future ladder rungs exceed int4).
-- [ ] Delete `packages/db/migrations/` entirely; run `pnpm run db:generate` from the repo root
-  to emit a fresh `0000_*`.
-- [ ] Add a custom migration for append-only enforcement:
+  **Correction to this plan:** `positions` and `games` are *not* actually mutually
+  referential — only `positions.first_seen_game_id → games.id` exists in that direction, and
+  `games` has no reference back to `positions`. Tracing every FK confirmed the full dependency
+  graph is a DAG (`users → games → positions → game_positions → evals/fog_scores/tb_probes/
+  proofs → ledger_entries`, plus `games → analyses` and `users → api_keys`), so simply
+  reordering the table declarations (users and games before positions) satisfies TypeScript
+  with zero circularity — no `AnyPgColumn` workaround needed. `tsc --noEmit` confirmed clean.
+- [ ] ~~`evals.nodes`: `integer` → `bigint`~~ **Deviation: skipped, reasoning was wrong.**
+  Postgres `integer` is 4 bytes signed, max ≈2.147 billion — the canonical ladder tops out at
+  64,000,000 nodes, nowhere near that ceiling even allowing for future rungs an order of
+  magnitude higher. Left as `integer`; logged in the Decision log rather than silently dropped.
+- [x] Delete `packages/db/migrations/` entirely; run `pnpm run db:generate` from the repo root
+  to emit a fresh `0000_*`. (Deleted via `git rm -r` rather than `rm -rf` — same effect on
+  a clean, fully-committed directory, but keeps the removal in git's reversible history.
+  Regenerated as `0000_illegal_killraven.sql`; drizzle-kit's own summary confirmed the expected
+  shape — 11 tables, 11 real `fk`s, all prior indexes intact.)
+- [x] Add a custom migration for append-only enforcement:
   `npx drizzle-kit generate --custom --name append_only_guards` (from repo root), then fill the
   generated SQL file with:
 
@@ -467,20 +476,39 @@ say so in the commit body.
     FOR EACH ROW EXECUTE FUNCTION penumbra_block_mutation();
   ```
 
-- [ ] Add `scripts/db-smoke.mjs` (repo root `scripts/`): connects via `DATABASE_URL` (default
+- [x] Add `scripts/db-smoke.mjs` (repo root `scripts/`): connects via `DATABASE_URL` (default
   `postgresql://penumbra:penumbra@localhost:5432/penumbra`), inserts a user→game→position→eval
-  chain, then asserts (a) `UPDATE evals …` raises the append-only exception, (b) inserting an
-  `eval` with a nonexistent `position_id` raises an FK violation, (c) cleans up nothing (the
-  test rows are fine to keep in a dev DB) — print `DB SMOKE OK` on success, exit 1 otherwise.
+  chain, then asserts (a) `UPDATE evals …` raises the append-only exception, (b) `DELETE FROM
+  evals …` also raises it (the trigger covers both), (c) inserting an `eval` with a nonexistent
+  `position_id` raises an FK violation, (d) cleans up nothing (the test rows are fine to keep in
+  a dev DB) — prints `DB SMOKE OK` on success, exit 1 otherwise. Added `"db:smoke"` to the root
+  `package.json` scripts.
+  **Dependency note:** the script needs `drizzle-orm`'s `sql` tagged-template to run raw
+  UPDATE/DELETE probes; a bare `import 'drizzle-orm'` from a file physically at repo-root
+  `scripts/` cannot resolve through pnpm's per-package `node_modules` isolation (Node's ESM
+  resolver walks up from the *importing file's* own location, not cwd), so `drizzle-orm` was
+  added as a real root `dependencies` entry. This is a one-time fix that also unblocks every
+  later-stage root `scripts/*.mjs` file that needs a workspace package. `pg`/`@penumbra/db`
+  itself did *not* need the same treatment — the script's only import from `@penumbra/db` is a
+  relative path (`../packages/db/dist/index.js`), and that module's own bare imports resolve
+  fine from *its own* location inside `packages/db/node_modules`.
+  **Also required starting Docker Desktop** (it was stopped at session start, per prior
+  PROGRESS.md notes) to actually run `docker-compose up -d postgres` and apply migrations to a
+  real database for the first time ever in this project — left running afterward.
 
-**Acceptance gate:**
+**Acceptance gate — actually run, not just described (first real DB in this project's
+history):**
 
 ```powershell
 docker-compose -f infra/docker-compose.yml up -d postgres
-pnpm run db:migrate                        # both migrations apply clean to a fresh DB
-node scripts/db-smoke.mjs                  # → DB SMOKE OK
+pnpm run db:migrate                        # both migrations applied clean to a fresh DB
+node scripts/db-smoke.mjs                  # → DB SMOKE OK (setup + both triggers + FK, all live)
 pnpm build                                 # @penumbra/db still compiles
 ```
+Verified: 11 tables, 11 FK constraints (`pg_constraint`), exactly 3 trigger objects
+(`pg_trigger`, not the 6 rows `information_schema.triggers` shows — that view lists one row
+per covered event, UPDATE and DELETE separately, for the same `BEFORE UPDATE OR DELETE`
+trigger).
 
 **If it fails:** drizzle-kit version quirks around `--custom` → check
 `npx drizzle-kit generate --help` for the exact flag spelling in 0.24.x; worst case hand-create
@@ -1115,6 +1143,23 @@ methodology finalization. **Every task here has an ask-the-user checkpoint** (§
 - **2026-07-08 — Syzygy value mapping:** CursedWin/BlessedLoss are draws under standard rules;
   `win` claims require strict `Wdl::Win` + DTZ-vs-halfmove-clock check; `at_least_draw` accepts
   Win/CursedWin/Draw and BlessedLoss only with `|dtz| + hmc ≥ 100`.
+- **2026-07-08 — `canonicalize` version:** pinned `^3.0.0` (latest on the registry), not the
+  originally-guessed `^2.0.0` — check the actual registry before pinning next time.
+- **2026-07-08 — `evals.nodes` stays `integer`:** the drafted plan to widen it to `bigint`
+  assumed future overflow risk that doesn't exist — int4's ~2.147B ceiling is nowhere near any
+  realistic single-position node count (canonical ladder tops at 64M). Skipped as scope creep
+  that wasn't fixing a real defect.
+- **2026-07-08 — `positions`/`games` aren't mutually referential:** tracing the actual FK graph
+  found a clean DAG, not the circular reference the draft plan assumed — reordering table
+  declarations (dependency-first) was sufficient, no `AnyPgColumn` escape hatch needed.
+- **2026-07-08 — root-level `drizzle-orm` dependency:** added so `scripts/*.mjs` (this stage's
+  `db-smoke.mjs`, and every later-stage ops script that touches the DB directly) can resolve it
+  — pnpm's per-package `node_modules` isolation means a script physically at repo-root
+  `scripts/` can't see a workspace package's own dependencies merely by importing that
+  package's dist output via a relative path; only the workspace package's *own* files can.
+- **2026-07-08 — Docker Desktop started:** it was stopped at session start (a prior session had
+  paused it deliberately); starting it was necessary to actually run and verify the Stage 1.4
+  migrations against a live Postgres instead of only reading the generated SQL. Left running.
 
 ## Deferred / post-launch
 
