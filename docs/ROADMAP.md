@@ -564,7 +564,21 @@ over-width lines (mine and a couple of pre-existing ones) that `--check` also fl
 of indent width — a whitespace-only diff, confirmed by rerunning the full test suite (still
 20/20) and clippy (still clean) afterward.
 
-**Commit plan:** `fix ci workspace paths and eslint parser dependency`.
+**Second unplanned fix, only found by actually watching the pushed CI run (not just running
+things locally):** the run failed at the `Type check` step with
+`@penumbra/fog: Cannot find module '@penumbra/core'`. `turbo.json`'s `type-check` task had no
+`dependsOn: ["^build"]` (unlike `build` and `test`), so on a genuinely clean checkout turbo ran
+every package's `tsc --noEmit` in parallel with no ordering — and `@penumbra/fog` needs
+`@penumbra/core`'s compiled `dist/` (its `package.json` `exports` map points there, not at
+`src/`). This had never surfaced locally because `dist/` folders were already sitting on disk
+from earlier builds in every session. Added the missing `dependsOn`, then reproduced and
+confirmed the fix by actually deleting every package's `dist/` and `.turbo` cache and rerunning
+`pnpm type-check` from that clean state (fails without the fix, passes with it), then reran the
+full local sequence (`type-check`, `lint`, `build`, `test`, plus all three Rust steps) end to
+end from clean before pushing again.
+
+**Commit plan:** `fix ci workspace paths and eslint parser dependency`,
+`fix type-check task missing a build dependency in turbo`.
 
 **Stage 1 close-out:** update `PROGRESS.md` (hardening section: what shipped, the kqpk
 semantic-honesty note, zobrist migration note), tick this file's boxes, commit
