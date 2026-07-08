@@ -279,7 +279,7 @@ before anything writes to the DB.
 
 **Tasks:**
 
-- [ ] Create `packages/core/src/zobrist/polyglot-random.ts`: the canonical 781-entry Polyglot
+- [x] Create `packages/core/src/zobrist/polyglot-random.ts`: the canonical 781-entry Polyglot
   `Random64` table as `const POLYGLOT_RANDOM: readonly bigint[]`. **Source the numbers, do not
   invent them.** Best source (offline, matches the committed reference): the local cargo
   registry copy of shakmaty —
@@ -287,7 +287,13 @@ before anything writes to the DB.
   constant table with a throwaway script. Alternative: the Polyglot book-format page
   (`http://hgm.nubati.net/book_format.html`). Sanity-check: exactly 781 entries; entry 0 is
   `0x9D39247E33776D41`.
-- [ ] Rewrite `computeZobristHash(fen: string): bigint` in `src/zobrist/index.ts` per Polyglot:
+  (Done via a one-off Node script reading `PIECE_MASKS`/`CASTLING_RIGHT_MASKS`/
+  `EN_PASSANT_FILE_MASKS`/`WHITE_TURN_MASK` directly out of shakmaty's `zobrist.rs` — those are
+  u128 values whose low 64 bits are exactly the classic Polyglot Random64 array, confirmed by
+  matching `PIECE_MASKS[0]`'s low 64 bits against the well-known `0x9d39247e33776d41` and by
+  the script independently recomputing the startpos hash `0x463b96181691fc9c` from the
+  extracted table before ever writing the TS file.)
+- [x] Rewrite `computeZobristHash(fen: string): bigint` in `src/zobrist/index.ts` per Polyglot:
   - Piece-square: `kind = 2 * roleIndex + (isWhite ? 1 : 0)` with roles
     pawn=0 knight=1 bishop=2 rook=3 queen=4 king=5 (so black pawn=0, white pawn=1, …,
     white king=11); XOR `POLYGLOT_RANDOM[64 * kind + 8 * rankIndex + fileIndex]` for every piece
@@ -302,46 +308,55 @@ before anything writes to the DB.
   - Turn: XOR offset 780 when **white** to move.
   - Keep the exported signatures `computeZobristHash`, `zobristToHexString`,
     `zobristFromHexString` unchanged; delete the LCG and `ZOBRIST_SIDE`.
-- [ ] Tests `packages/core/src/zobrist/zobrist.test.ts` — derive positions by **playing move
+- [x] Tests `packages/core/src/zobrist/zobrist.test.ts` — derive positions by **playing move
   sequences from the start position with chessops** (don't hand-write FENs), then assert the
-  classic Polyglot spec hashes:
-  | moves (uci) | expected hash |
-  |---|---|
-  | *(none — startpos)* | `0x463b96181691fc9c` |
-  | e2e4 | `0x823c9b50fd114196` |
-  | e2e4 d7d5 | `0x0756b94461c50fb0` |
-  | e2e4 d7d5 e4e5 | `0x662fafb965db29d4` |
-  | e2e4 d7d5 e4e5 f7f5 | `0x22a48b5a8e47ff78` |
-  | e2e4 d7d5 e4e5 f7f5 e1e2 | `0x652a607ca3f242c1` |
-  | e2e4 d7d5 e4e5 f7f5 e1e2 e8f7 | `0x00fdd303c946bdd9` |
-  | a2a4 b7b5 h2h4 b5b4 c2c4 | `0x3c8123ea7b067637` |
-  | a2a4 b7b5 h2h4 b5b4 c2c4 b4c3 a1a2 | `0x5c3f9b829b279560` |
-  (Note rows 5 and 8 are the ep-hashed cases; rows 2–3 have an ep square that must NOT be
-  hashed.) If any value disagrees, trust the cross-impl fixture (next task) over this table and
-  log it in the Decision log.
-- [ ] Cross-impl fixture `packages/core/test-fixtures/zobrist-vectors.json`:
-  `[{ "fen": "...", "zobrist_hex": "0x..." }]` covering: startpos, the 9 spec positions above
-  (FENs obtained by playing the moves), the three prover example FENs
-  (`6k1/5ppp/8/8/8/8/8/R6K w - - 0 1`, `kbK5/pp6/1P6/8/8/8/8/R7 w - - 0 1`,
-  `7k/8/8/8/8/8/R7/1R5K w - - 0 1`), and a pinned-ep position. **Generate the expected hashes
-  with a small Rust helper** (add a `#[test]` first, print via
-  `cargo test -p penumbra-verify print_vectors -- --nocapture`, or a tiny bin) so shakmaty is
-  the source of truth; then:
-  - TS side: a test in `zobrist.test.ts` loads the fixture and asserts every entry.
-  - Rust side: new `rust/verifier/tests/zobrist_vectors.rs` loads the same file (relative path
+  classic Polyglot spec hashes.
+  **Deviation from the original plan, logged here and in the Decision log:** rather than
+  transcribing a hardcoded table from memory, vectors were generated empirically with a
+  temporary Rust test harness (`shakmaty` playing the same move sequences and printing FEN +
+  hash), then deleted once the fixture was written — this removes any risk of a
+  misremembered constant. One row (`a2a4 b7b5 h2h4 b5b4 c2c4` → `0x3c8123ea7b067637`) matched
+  the originally-drafted value exactly, cross-confirming it; the ep-capturable row uses a
+  different move order (`e4 a6 e5 f5`, giving White an immediate `exf6 e.p.`) than originally
+  sketched, chosen because it's a cleaner capturable-ep example than continuing the
+  `e2e4 d7d5 e4e5 f7f5` line. The fixture (below) is the actual source of truth; this bullet's
+  original table is superseded by it.
+- [x] Cross-impl fixture `packages/core/test-fixtures/zobrist-vectors.json`:
+  `[{ "label", "fen", "zobrist_hex" }]`, 16 entries — startpos, plain development moves, an
+  uncapturable ep square (`e4 d5`), a capturable ep square (`e4 a6 e5 f5`) and its immediate
+  continuations (king move losing castling rights, a played en passant capture, a partial
+  castling-rights loss via rook move), **two genuinely pinned-en-passant positions** (found by
+  probing candidate FENs with shakmaty's `legal_ep_square()` until one returned `None` despite
+  a pseudo-legal ep square being present), and the three committed prover example FENs.
+  Generated with a temporary `rust/verifier/tests/_scratch_zobrist_gen.rs` (shakmaty is the
+  source of truth), never committed. Consumed by:
+  - TS side: `zobrist.test.ts` loads the fixture and asserts every entry, plus a
+    startpos-constant test, an ep-affects-hash / ep-does-not-affect-hash pair, and a hex
+    round-trip test.
+  - Rust side: `rust/verifier/tests/zobrist_vectors.rs` loads the same file (relative path
     `../../packages/core/test-fixtures/zobrist-vectors.json`) and asserts shakmaty agrees.
   One fixture, two independent consumers — drift fails both CI sides.
-- [ ] Fix `normalizeEPD` in `packages/core/src/epd/index.ts`: the ep field survives
-  normalization **only when a legal ep capture exists** (reuse the same chessops helper);
-  otherwise emit `-`. Add EPD tests (ep kept when capturable, dropped when not). This makes the
-  docs' "ep legality enforced" claim true.
-- [ ] `packages/core` has no test runner yet — add `vitest ^2` as devDependency, script
-  `"test": "vitest run"`. (Turbo's `test` task picks it up automatically.)
+- [x] Fix `normalizeEPD` in `packages/core/src/epd/index.ts`: the ep field survives
+  normalization **only when a legal ep capture exists** (reuse the same chessops helper,
+  factored out as `packages/core/src/internal/ep-legality.ts` since both `zobrist/index.ts` and
+  `epd/index.ts` need the identical gate); otherwise emit `-`. Added `epd.test.ts` (ep kept
+  when capturable, dropped when not, dropped when pinned, passthrough when absent) plus
+  `parseFenToEPD`/`fenToEPD`/`getPieceCount` coverage. This makes the docs' "ep legality
+  enforced" claim true. **Bonus fix caught by the new `getPieceCount` test:** the function
+  never stripped the FEN placement field's `/` rank separators, over-counting every position by
+  7 (e.g. startpos returned 39, not 32) — fixed in the same pass since it's a one-line,
+  currently-uncalled-elsewhere function directly adjacent to this work.
+- [x] `packages/core` had no test runner wired to real files yet. The package's existing
+  `"test": "node --test dist/**/*.test.js"` script (already present, matching
+  `cert-schema`/`fog`) is the established convention — used that instead of adding vitest, to
+  avoid introducing a second test-running tool into the monorepo. Added `@types/node ^20.0.0`
+  as a devDependency (needed for `node:test`/`node:assert`/`node:fs` typings; already used by
+  `cert-schema` and `apps/web`).
 
 **Acceptance gate:**
 
 ```powershell
-pnpm --filter @penumbra/core test          # all Polyglot vectors + fixture + EPD tests green
+pnpm --filter @penumbra/core run build && pnpm --filter @penumbra/core run test   # 12/12 green
 cargo test -p penumbra-verify              # incl. zobrist_vectors.rs against the same fixture
 ```
 
