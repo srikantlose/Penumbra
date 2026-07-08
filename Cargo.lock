@@ -353,6 +353,8 @@ dependencies = [
 name = "penumbra-prover"
 version = "0.1.0"
 dependencies = [
+ "clap",
+ "penumbra-verify",
  "serde",
  "serde_json",
  "shakmaty",
