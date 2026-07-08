@@ -216,6 +216,35 @@ than hashed inconsistently.
    - For `at_least_draw` certificates: cycles are allowed.
 4. **Report**: Print claim, counts, elapsed time; exit 0 if valid, exit 1 if invalid.
 
+### Tablebase terminal soundness (DTZ / 50-move rule)
+
+Syzygy tables report WDL<sub>50</sub> (win/draw/loss under the 50-move rule) and DTZ (distance
+to the next zeroing move), not the simple, clock-agnostic game value. A `tablebase` terminal's
+declared `value` must match the WDL as seen from the *claiming side*, at the *actual halfmove
+clock* of the replayed position — not the clock-agnostic value the raw DTZ number would suggest
+in isolation. Implementations (both `rust/prover`'s search-time leaf oracle and
+`rust/verifier`'s probe-time check) get this by construction by using a `probe_wdl`-style API
+that already folds `halfmoves()` into a 7-valued ambiguity-aware result
+(`Win` / `CursedWin` / `MaybeWin` / `Draw` / `BlessedLoss` / `MaybeLoss` / `Loss`), rather than
+hand-deriving `|dtz| + halfmove_clock` comparisons:
+
+| WDL (claiming side, clock-adjusted) | valid under `win` | valid under `at_least_draw` |
+| --- | --- | --- |
+| `Win` | `value: "win"` | `value: "win"` |
+| `CursedWin` (win in theory, drawn under the 50-move rule from here) | never | `value: "draw"` |
+| `MaybeWin` (DTZ-rounding ambiguity between `Win`/`CursedWin`) | never | `value: "draw"` |
+| `Draw` | never | `value: "draw"` |
+| `BlessedLoss` (loss in theory, saved by the 50-move rule from here) | never | `value: "draw"` |
+| `MaybeLoss` (DTZ-rounding ambiguity between `BlessedLoss`/`Loss`) | never | never |
+| `Loss` | never | never |
+
+`MaybeWin`/`MaybeLoss` only arise when probing at a nonzero halfmove clock and landing exactly
+on the DTZ-rounding boundary; a verifier or prover must reject rather than guess in the
+`MaybeLoss` case (it cannot tell a genuine loss from a 50-move-rule save), and may safely accept
+`MaybeWin` under `at_least_draw` only (both outcomes it could represent, `Win` and `CursedWin`,
+already qualify as "at least a draw"). Also never probe a position with castling rights — Syzygy
+tables are castling-free and the result is undefined for one.
+
 ## Examples
 
 ### Minimal fortress certificate (3 moves, 2 nodes)

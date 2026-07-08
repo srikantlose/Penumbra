@@ -647,92 +647,69 @@ holds 290 files ≈ 1 GB. **Done** 2026-07-08: 290 files, 984 MB, second run rep
 
 ### 2.2 Prover: claim modes, TB leaf oracle, transpositions (`rust/prover`)
 
-- [ ] Add dep `shakmaty-syzygy = "0.24"` (pairs with shakmaty 0.26 — verify `cargo tree -p
-  penumbra-prover | findstr shakmaty` still shows 0.26 after adding; if the resolver pulls a
-  different shakmaty, pin the shakmaty-syzygy version that depends on `^0.26`, do NOT bump
-  shakmaty itself).
-- [ ] New `src/tb.rs`: thin oracle wrapper —
-
+- [x] Add dep `shakmaty-syzygy = "0.24"` — confirmed via `cargo tree -p penumbra-prover` that it
+  resolves to `shakmaty 0.26.0` (checked crates.io's dependency graph directly before adding:
+  `shakmaty-syzygy 0.24.0` requires `shakmaty ^0.26.0` exactly; 0.25+ require newer shakmaty).
+- [x] New `src/tb.rs`: thin oracle wrapper. **Deviates from the pseudocode above** — see decision
+  log ("TbOracle built on `probe_wdl`/`AmbiguousWdl`, not `probe_wdl_after_zeroing`+manual DTZ
+  math"). Signature actually shipped:
   ```rust
-  pub struct TbOracle { tb: shakmaty_syzygy::Tablebase<Chess>, pub max_pieces: u32 }
+  pub struct TbOracle { tb: Tablebase<Chess>, max_pieces: usize }
   impl TbOracle {
-      pub fn new(dir: &Path) -> Result<Self, ...>;        // Tablebase::new() + add_directory(dir)
-      pub fn probe_wdl(&self, pos: &Chess) -> Option<Wdl>; // None if pieces > max, castling rights present, or probe error
-      pub fn probe_dtz(&self, pos: &Chess) -> Option<Dtz>;
+      pub fn new(dir: &Path) -> io::Result<Self>;
+      pub fn probe(&self, pos: &Chess, perspective: Color) -> Option<AmbiguousWdl>;
   }
+  pub fn outcome_for_claim(wdl: AmbiguousWdl, claim: ClaimValue) -> Option<&'static str>;
   ```
-
-  Guard: **never probe a position with castling rights** (Syzygy is castling-free; probing one
-  is undefined) — return `None`.
-- [ ] `src/pns.rs` — claim-mode generalization:
-  - `ProofSearchConfig` gains `pub claim: ClaimValue` (`enum ClaimValue { Win, AtLeastDraw }`,
-    default `Win`) and the existing `tablebase_path: Option<String>` finally gets read
-    (constructs the `TbOracle` when set).
-  - Terminal evaluation (claiming side's perspective), replacing the current win-only logic:
-    | outcome | `Win` claim | `AtLeastDraw` claim |
-    |---|---|---|
-    | opponent checkmated | success | success |
-    | claiming side checkmated | fail | fail |
-    | stalemate / insufficient material | fail | **success** |
-    | TB probe `Wdl::Win` (for claiming side) | success (with DTZ/halfmove-clock check below) | success |
-    | TB `CursedWin` | **fail** (it's a draw under the 50-move rule) | success |
-    | TB `Draw` | fail | success |
-    | TB `BlessedLoss` | fail | success **only if** `|dtz| + halfmove_clock ≥ 100` (the 50-move save must still hold from here); else fail |
-    | TB `Loss` | fail | fail |
-    For a `Win`-claim TB success, apply the symmetric soundness check: require
-    `|dtz| + halfmove_clock ≤ 100` is NOT the right form — require the win is achievable within
-    the 50-move budget: `Wdl::Win` already encodes that under optimal play from a zeroing
-    reset; to stay sound with a nonzero clock, require `|dtz| ≤ 100 - halfmove_clock`.
-    **Watch the perspective sign:** shakmaty-syzygy WDL is from the side-to-move's perspective;
-    convert to the claiming side (`if pos.turn() != claiming_side { flip }`). Write a unit test
-    for both colors — this is the classic bug.
-  - TB terminals are evaluated at leaf creation exactly like mate terminals today
-    (`make_leaf` → immediate `(pn, dn)`), recording terminal type `tablebase` and `value`
-    (`"win"` or `"draw"` from the claiming side's perspective). Do not emit `dtm`.
-  - **Transposition table:** `HashMap<u64 /* zobrist */, NodeIndex>` across the whole search.
-    On generating a child position whose zobrist already exists: reuse the existing node (DAG).
-    If the existing node is an ancestor on the current path (a cycle):
-    - `Win` claim: do NOT create the edge-to-ancestor; treat that move as leading to an
-      unproven fresh node (keeps win certs acyclic by construction, as today).
-    - `AtLeastDraw` claim: create a **terminal node** `{ kind: "terminal", terminal:
-      { type: "transposition", value: "draw" } }` whose zobrist is the repeated position's —
-      this is exactly the spec's fortress-cycle shape, and the Stage 1 verifier already accepts
-      it (ancestor-on-path rule).
-    Because nodes are deduped by zobrist, each position carries exactly one OR-move choice —
-    the "positional strategy" property the verifier's transposition rule assumes. Note this in
-    the module doc comment.
-  - Halfmove clock: thread it through the search state (shakmaty tracks it on `Chess` via
-    `pos.halfmoves()`) — needed for the DTZ soundness checks above.
-- [ ] `src/certificate.rs`: `Terminal` gains `dtm: Option<i32>` (kept `None`);
+  Castling-rights and piece-count guards implemented as specified.
+- [x] `src/pns.rs` — claim-mode generalization: `ClaimValue { Win, AtLeastDraw }` (default
+  `Win`) added to `ProofSearchConfig`; `tablebase_path` now constructs a `TbOracle`. Terminal
+  evaluation matches the table above exactly (verified via `tb::tests::*_claim_truth_table`),
+  but the DTZ/halfmove-clock arithmetic is delegated to `shakmaty_syzygy::Tablebase::probe_wdl`
+  (see decision log) rather than hand-rolled. Both-colors perspective unit test:
+  `tb::tests::probe_perspective_matches_regardless_of_side_to_move` (KQvK, both sides to move).
+- [x] TB terminals evaluated at leaf creation exactly as specified; terminal type `tablebase`,
+  value `"win"`/`"draw"`; `dtm` never emitted.
+- [x] **Transposition handling implemented; full cross-branch DAG dedup deliberately NOT
+  implemented** — see decision log ("ancestor-path cycle detection only, no global transposition
+  table"). Ancestor detection walks `PnsNode.parent` links (each node now caches its own
+  `zobrist: String`); on a hit, `AtLeastDraw` emits a `transposition` terminal, `Win` is
+  unchanged (no-op, matching today's behavior exactly). Halfmove clock: not threaded manually —
+  `pos.halfmoves()` is read directly off the position at probe time, which is what
+  `probe_wdl` needs.
+- [x] `src/certificate.rs`: `Terminal` gains `dtm: Option<i32>` (kept `None`);
   `Dependencies { tablebase: Some("syzygy".into()) }` iff the emitted tree contains ≥1
-  tablebase terminal; claim `value` string comes from the config (`"win"` / `"at_least_draw"`).
-- [ ] `src/main.rs`: add `--claim <win|at_least_draw>` (default `win`) and `--syzygy <DIR>`
-  (sets `tablebase_path`). Exit codes unchanged.
-- [ ] Round-trip tests `tests/fortress_roundtrip.rs`: Tier-A seeds (below) prove →
-  serialize → `penumbra_verify` with `TablebasePolicy::Syzygy(path)` → assert valid. Guard the
-  TB-dependent tests with a check that `tablebases/syzygy/3-4-5/` exists, else
-  `eprintln! + return` (CI has no tablebases; the tests must skip, not fail — same pattern as
-  `#[ignore]` with a runtime check).
+  tablebase terminal; claim `value` string comes from the config.
+- [x] `src/main.rs`: `--claim <win|at_least_draw>` (default `win`) and `--syzygy <DIR>` added.
+- [x] Round-trip tests `tests/fortress_roundtrip.rs`: KPvK dead-draw (endpoint-validated, see
+  below) proves → serializes → verifies with `TablebasePolicy::Syzygy`, plus a
+  rejected-without-`--syzygy` counterpart. Runtime-skip guard on `tablebases/syzygy/3-4-5/`
+  existing, confirmed both the "present" and (by temporarily renaming the dir) "absent" paths.
 
 ### 2.3 Verifier: real probing (`rust/verifier`)
 
-- [ ] Add dep `shakmaty-syzygy = "0.24"`; write the verifier's **own** `src/tb.rs` wrapper
-  (copy the shape, not the code — invariant 1.1.1).
-- [ ] `TablebasePolicy` gains `Syzygy(PathBuf)`. During the semantic DFS, a `tablebase`
-  terminal under `Syzygy` policy: replayed position must have ≤5 pieces (or ≤ the loaded set's
-  max) and no castling rights; probe WDL; the result (converted to the claiming side's
-  perspective, with the same DTZ/halfmove-clock rules as 2.2) must match `terminal.value`.
-  Mismatch or probe failure constructs `VerifyError::TablebaseError` text into
-  `report.errors`; `report.probe_count` increments per successful probe.
-- [ ] CLI: `--syzygy DIR` now actually wires `TablebasePolicy::Syzygy`. `--offline` becomes:
-  error out if a tablebase terminal exists and no `--syzygy` was given (i.e., alias for
-  default-Forbid, kept for spec compatibility). `--tb-endpoint` stays inert (deferred; print a
-  "not implemented, use --syzygy" warning if passed).
-- [ ] Mutation test: take a Tier-A fortress cert, flip a TB terminal's `value` from `draw` to
-  `win` → must fail with a TablebaseError-flavored message. Same runtime-skip guard when
-  tablebases are absent.
-- [ ] Spec addendum in `docs/CERTIFICATE_FORMAT.md`: document the DTZ/halfmove-clock soundness
-  rule for TB terminals (both claim kinds) under the Verification section.
+- [x] Added `shakmaty-syzygy = "0.24"`; `rust/verifier/src/tb.rs` is a separately-written wrapper
+  (own `TbOracle`, own `wdl_matches` truth table — no shared code with the prover's `tb.rs`,
+  per invariant 1.1.1). Returns `Result<_, String>` rather than `Option` (a verifier probe
+  failure is always reportable, unlike the prover which can just keep searching).
+- [x] `TablebasePolicy::Syzygy(PathBuf)` added (dropped `Copy` from the enum's derive since
+  `PathBuf` isn't `Copy`; `Clone` retained). Oracle built once per `verify_with` call (not
+  per-terminal) and threaded through `SemanticCtx`. Piece-count/castling guards match 2.2.
+  Mismatch and probe-failure messages both go through `VerifyError::TablebaseError` as specified;
+  `report.probe_count` increments once per successful probe (match or mismatch — a mismatch is
+  still a real probe, just a failing one).
+- [x] CLI: `--syzygy DIR` wires `TablebasePolicy::Syzygy`. `--offline` implemented as a hard
+  override (forces `Forbid` even if `--syzygy`/`--assume-tb` are also passed, with a warning) —
+  stronger than the spec's minimum ("alias for default-Forbid"), chosen so the flag has real
+  teeth as an explicit opt-out. `--tb-endpoint` still inert, warns to use `--syzygy`.
+- [x] Mutation test added as static fixtures (verifier can't depend on the prover crate, so this
+  couldn't be generated inline): `tests/golden/kpvk_fortress_draw.json` (real, endpoint-validated
+  KPvK draw, produced by the actual prover CLI) and `tests/mutations/tablebase_value_flip.json`
+  (same cert, `value` flipped `draw`→`win`). `mutation_tablebase_value_flip_fails_with_syzygy`
+  asserts the flip is caught with a `"tablebase probe failed"` + `"declares value"` message.
+- [x] Spec addendum written: `docs/CERTIFICATE_FORMAT.md` §"Tablebase terminal soundness (DTZ /
+  50-move rule)", including the same probe-vs-declared-value table as above, framed around
+  `probe_wdl`'s 7-valued `AmbiguousWdl` rather than raw DTZ arithmetic.
 
 ### 2.4 Fortress seeds (~10, min 5)
 
@@ -1221,9 +1198,43 @@ methodology finalization. **Every task here has an ask-the-user checkpoint** (§
   the 290 filenames, so it stays correct if the host's set ever changes. The `sesse.net` mirror
   is currently serving a mismatched TLS cert for an unrelated host (fails from both curl/schannel
   and Node) — kept as a best-effort per-file fallback in the script, but don't rely on it.
-- **2026-07-08 — Syzygy value mapping:** CursedWin/BlessedLoss are draws under standard rules;
-  `win` claims require strict `Wdl::Win` + DTZ-vs-halfmove-clock check; `at_least_draw` accepts
-  Win/CursedWin/Draw and BlessedLoss only with `|dtz| + hmc ≥ 100`.
+- **2026-07-08 — Syzygy value mapping — superseded by the `probe_wdl`/`AmbiguousWdl` decision
+  below.** (Original plan, kept for history: `win` claims require strict `Wdl::Win` +
+  hand-rolled DTZ-vs-halfmove-clock check; `at_least_draw` accepts Win/CursedWin/Draw and
+  BlessedLoss only with `|dtz| + hmc ≥ 100`. Superseded because `shakmaty-syzygy`'s own
+  `Tablebase::probe_wdl` already does this arithmetic — see below.)
+- **2026-07-08 — `TbOracle` built on `probe_wdl`/`AmbiguousWdl`, not `probe_wdl_after_zeroing` +
+  manual DTZ math:** reading the actual `shakmaty-syzygy 0.24.0` source
+  (`src/tablebase.rs`/`src/types.rs`) before writing the oracle showed `Tablebase::probe_wdl`
+  already computes `AmbiguousWdl::from_dtz_and_halfmoves(dtz, pos.halfmoves())` internally — the
+  exact `|dtz| + halfmove_clock` bookkeeping this roadmap's 2.2 pseudocode asked to hand-roll.
+  Using it directly: (a) removes an entire class of "the classic bug" this doc explicitly warned
+  about, since the sign/rounding logic is the crate's own tested code, not a reimplementation;
+  (b) collapses the `win`/`at_least_draw` truth table to one small match (`tb::outcome_for_claim`
+  in the prover, `tb::wdl_matches` in the verifier — independently written per the two-crate
+  rule) over `AmbiguousWdl`'s 7 values, including its `MaybeWin`/`MaybeLoss` rounding-ambiguity
+  cases, which the original DTZ-arithmetic plan didn't account for at all. `MaybeLoss` is
+  rejected under both claims (can't tell `Loss` from `BlessedLoss`); `MaybeWin` is accepted only
+  under `at_least_draw` (both `Win` and `CursedWin` already qualify). Both truth tables are
+  documented in `docs/CERTIFICATE_FORMAT.md` and covered by table-driven unit tests
+  (`tb::tests::*_claim_truth_table` in each crate).
+- **2026-07-08 — No cross-branch transposition dedup; ancestor-path cycle detection only:** the
+  roadmap's 2.2 pseudocode asked for a global `HashMap<zobrist, NodeIndex>` so repeated
+  positions share one arena node (a DAG) — but PNS over a true DAG requires multi-parent proof-
+  number backup (a node reached two ways must propagate to *both* parents), which is a known
+  hard generalization (the graph-history-interaction problem in PN-search literature) and not
+  something to bolt on hastily. Re-reading `rust/verifier/src/semantic.rs`'s existing
+  transposition-terminal check (`ctx.path_zobrists.contains(&node.zobrist)`) showed it only
+  requires the *terminal's own* zobrist to match *some ancestor's* zobrist — it does not require
+  the prover to actually share node objects, and doesn't check that every occurrence of a
+  position picks the same move (no "positional strategy" invariant is actually enforced
+  verifier-side). So the prover implements only the correctness-required half: walk
+  `PnsNode.parent` links from the node being expanded up to the root (each node now caches its
+  own `zobrist: String`), and if a child's zobrist matches an ancestor, close it with a
+  `transposition` terminal instead of continuing (`at_least_draw` only; `win` is untouched, as
+  specified). Cross-branch sharing as a search-size optimization is left undone; per this stage's
+  own "If it fails" guidance ("prefer candidates with locked pawns, few legal moves"), seed FENs
+  are picked for small search trees rather than relying on dedup to tame large ones.
 - **2026-07-08 — `canonicalize` version:** pinned `^3.0.0` (latest on the registry), not the
   originally-guessed `^2.0.0` — check the actual registry before pinning next time.
 - **2026-07-08 — `evals.nodes` stays `integer`:** the drafted plan to widen it to `bigint`

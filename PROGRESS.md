@@ -348,4 +348,11 @@ in `docs/ROADMAP.md` — that file is the forward-looking plan; this section jus
 
 ---
 
-**Next action:** the Stage 1 hardening pass (semantic verification, Polyglot zobrist, RFC 8785 hashing, real DB constraints, green CI) is done. Next per `docs/ROADMAP.md` is Stage 2, the M2 fortress track: add Syzygy probing (`shakmaty-syzygy`) so the prover can bottom out at tablebase draws/wins and emit `at_least_draw` fortress certificates, verified by the now-real semantic verifier. `docs/ROADMAP.md` has the full task-by-task plan through Stage 7 (launch) — treat it as the authoritative "what's next," not this section.
+**Next action:** Stage 1 (hardening) is done. Stage 2 (M2 fortress track) is mostly done:
+Syzygy tablebases fetched (`scripts/fetch-syzygy.mjs`, 290 files / 984 MB, gitignored), the
+prover now supports `--claim at_least_draw --syzygy <dir>` (real WDL leaf oracle + transposition
+terminals), and the verifier now supports `--syzygy <dir>` (real WDL probing, mismatches
+rejected). What's left in Stage 2 is 2.4: curate and commit ~10 (min 5) real fortress seed
+certificates across the roadmap's three tiers, each endpoint-validated and verified clean
+end-to-end. `docs/ROADMAP.md` has the full task-by-task plan through Stage 7 (launch) — treat it
+as the authoritative "what's next," not this section.
