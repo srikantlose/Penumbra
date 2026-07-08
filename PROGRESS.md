@@ -5,8 +5,8 @@
 This document tracks the implementation status of Penumbra Phase 1 (MVP). The work is organized by milestone and includes both completed components and next steps.
 
 **As of:** 2026-07-08  
-**Status:** Foundations + core systems verified end-to-end; PNS prover now emits forced-mate certificates that round-trip through the verifier; web skeleton up in the locked retro design system  
-**Commits shipped:** 9
+**Status:** Foundations + core systems verified end-to-end; PNS prover now emits forced-mate certificates that round-trip through the verifier; web skeleton up in the locked retro design system; hardening pass complete (verifier semantic verification, Polyglot zobrist, RFC 8785 hashing, real DB constraints, green CI) — see `docs/ROADMAP.md` for the detailed forward plan through launch  
+**Commits shipped:** 23
 
 ## Completed milestones
 
@@ -81,9 +81,42 @@ This document tracks the implementation status of Penumbra Phase 1 (MVP). The wo
 - Initial migration generated (`packages/db/migrations/0000_*.sql`, 11 tables) via `pnpm run db:generate`
 
 **Still needed:**
-- Apply migration against a running Postgres instance and confirm it lands cleanly (generation verified; live-DB apply not yet run in this environment)
-- Append-only enforcement triggers (UPDATE/DELETE blockers on `evals`/`fog_scores`) as a follow-up migration
-- Database initialization/seed scripts
+- Database initialization/seed scripts (`./seed` export declared in `package.json` but no `src/seed.ts` yet)
+
+Migration apply and append-only triggers are now done — see the hardening pass below.
+
+## Hardening pass (2026-07-08)
+
+Before building anything further on top of the certificate/zobrist/DB layers, five verified
+defects were fixed (full detail and rationale in `docs/ROADMAP.md` §Stage 1):
+
+- **`penumbra-verify` now does real semantic verification**, not just structural shape checks:
+  it replays every move against the claimed FEN with shakmaty, checks AND-node coverage is
+  exhaustive, and confirms terminals are truthful (checkmate really is checkmate, etc.).
+  Previously a cert with a fabricated zobrist or an incomplete opponent-reply set would still
+  report `valid: true`. The old `tests/golden/kqpk.json` fixture — hand-faked, not a real proof
+  — now correctly fails semantic verification and stays only as a structural-only fixture; the
+  two real prover example certs became the new semantic goldens.
+- **`packages/core`'s zobrist hashing is now real Polyglot**, not a homegrown LCG that could
+  never match the hashes shakmaty stamps into certificates. The Random64 table is extracted
+  directly from shakmaty's own source rather than retyped, and cross-checked against the Rust
+  side via a shared fixture (`packages/core/test-fixtures/zobrist-vectors.json`) asserted from
+  both `zobrist.test.ts` and `rust/verifier/tests/zobrist_vectors.rs`.
+- **Certificate identity hashing is now real RFC 8785** on both sides (`canonicalize` in
+  TypeScript, key-sorted `serde_json::Value` re-serialization in Rust), cross-checked via
+  `packages/cert-schema/test-fixtures/hash-vectors.json`. `penumbra-verify verify`/`inspect`
+  both print the computed `SHA256:`.
+- **The DB schema's foreign keys are now real**: every FK-ish column was `bigserial` (each
+  silently creating its own sequence instead of referencing anything); they're `bigint` +
+  `.references()` now. Append-only triggers block UPDATE/DELETE on `evals`, `fog_scores`, and
+  `ledger_entries` at the database level. **Migrations were applied to a live Postgres instance
+  for the first time in this project's history** and verified end-to-end with
+  `scripts/db-smoke.mjs` (real insert chain, both triggers, the FK constraint, all exercised
+  live, not just inspected as generated SQL).
+- **CI is genuinely green for the first time**: it previously couldn't pass as written (wrong
+  cargo working directory, a pnpm version pin conflicting with `packageManager`, node 18).
+  Fixed, plus a `rustfmt.toml` pinning the project's actual 2-space style so `cargo fmt --check`
+  validates against reality instead of the entire codebase.
 
 ## In-progress and next steps
 
@@ -273,6 +306,9 @@ penumbra/
 
 ## Verification checklist (per milestone)
 
+- [x] Hardening: semantic verification, Polyglot zobrist, RFC 8785 hashing, real DB FKs +
+  append-only triggers, green CI — all cross-checked live (20/20 Rust tests, 12 core + 6
+  cert-schema TS tests, `db-smoke.mjs` against a real Postgres instance)
 - [x] M1: Golden test suite green; mutations fail with correct exit codes (`cargo test` in `rust/`, 4/4 passing; CLI exit codes confirmed manually)
 - [x] M2 (core): PNS prover emits forced-mate WIN certs that `penumbra-verify` accepts (`cargo test -p penumbra-prover`, 6/6; 3 example certs verify clean)
 - [ ] M2 (fortress): ~10 fortress `at_least_draw` certs generated and verified against Syzygy
@@ -280,6 +316,9 @@ penumbra/
 - [ ] M4: Import real Lichess game → analyze → fog timeline renders
 - [ ] M5: Position page shows provenance + eval history + fog
 - [ ] M6: `/v1/fog?fen=...` returns 202 then score; verifier binary available on crates.io
+
+Full per-stage task lists, exact commands, and acceptance gates for everything still open live
+in `docs/ROADMAP.md` — that file is the forward-looking plan; this section just tracks status.
 
 ## Development notes
 
@@ -303,4 +342,4 @@ penumbra/
 
 ---
 
-**Next action:** M2's PNS core is done (forced-mate certs prove→verify end-to-end). Next is either the M2 fortress track (add Syzygy probing so the prover can bottom out at tablebase draws/wins and emit `at_least_draw` fortress certs) or M3 (UCI orchestration). Both are critical paths that can run in parallel.
+**Next action:** the Stage 1 hardening pass (semantic verification, Polyglot zobrist, RFC 8785 hashing, real DB constraints, green CI) is done. Next per `docs/ROADMAP.md` is Stage 2, the M2 fortress track: add Syzygy probing (`shakmaty-syzygy`) so the prover can bottom out at tablebase draws/wins and emit `at_least_draw` fortress certificates, verified by the now-real semantic verifier. `docs/ROADMAP.md` has the full task-by-task plan through Stage 7 (launch) — treat it as the authoritative "what's next," not this section.
