@@ -25,6 +25,9 @@
     },
     "lint": {},
     "type-check": {},
+    "clean": {
+      "cache": false
+    },
     "dev": {
       "cache": false,
       "persistent": true

@@ -526,17 +526,43 @@ Cargo.toml there — the workspace root is the repo root), and `pnpm/action-setu
 
 **Tasks:**
 
-- [ ] `.github/workflows/ci.yml`: remove `working-directory: rust` from all three cargo steps;
-  drop the `version: 8` input from `pnpm/action-setup` (it then respects `packageManager`);
+- [x] `.github/workflows/ci.yml`: removed `working-directory: rust` from all three cargo steps
+  (and switched `cargo test/clippy --all` → `--workspace`, the current non-deprecated spelling);
+  dropped the `version: 8` input from `pnpm/action-setup` (it now respects `packageManager`);
   `actions/setup-node` → node 20; `Swatinem/rust-cache` `workspaces: .`.
-- [ ] `packages/config/package.json`: add `@typescript-eslint/parser ^7` and
-  `@typescript-eslint/eslint-plugin ^7` as dependencies (the flat config references the parser
-  but never declared it — works only by hoisting luck).
-- [ ] `turbo.json`: add a `clean` task (`"clean": { "cache": false }`) — the root script calls
-  `turbo clean` but no such task exists.
+- [x] `packages/config/package.json`: added `@typescript-eslint/parser` and
+  `@typescript-eslint/eslint-plugin` at `^8.63.0` (latest on the registry, not the originally
+  guessed `^7` — `@typescript-eslint` 8.x's peer range already covers the installed
+  `eslint@8.57.1`, so no eslint version bump was needed). Also added `"type": "module"` to this
+  package.json (missing despite the config file using ESM `import`/`export default` — Node was
+  silently reparsing it every run and warning about it).
+  **Found and fixed a second, more serious latent bug while verifying this:** `parser:
+  '@typescript-eslint/parser'` as a **string** doesn't just work "by hoisting luck" — it's
+  outright rejected by ESLint's flat config (`ConfigError: Key "parser": Expected object with
+  parse() or parseForESLint() method`), confirmed by actually running the shared config in flat
+  mode. Flat config requires the imported parser *module object*, not its package name (that
+  string form is only valid in the legacy `.eslintrc` format). Fixed by importing
+  `@typescript-eslint/parser` and passing the module directly. This was previously undetectable
+  because **no package in the workspace actually invokes `@penumbra/config/eslint`** — only
+  `apps/web` has a `lint` script, and it uses `next lint` (its own `eslint-config-next`), not
+  this shared config. Verified the fix directly: ran the shared config against a real `.ts`
+  file with `ESLINT_USE_FLAT_CONFIG=true`, confirmed it errors before the fix and lints clean
+  after. Wiring this shared config into the five currently lint-less packages (core, fog, db,
+  cert-schema, config itself) is out of scope here — flagged for whichever later stage first
+  needs real linting there (Stage 3's `services/analysis` or Stage 5's `apps/api`).
+- [x] `turbo.json`: added a `clean` task (`"clean": { "cache": false }`) — confirmed via
+  `turbo run clean --dry-run` that it now dispatches to all six packages' own `clean` scripts.
 
 **Acceptance gate:** after the Stage 1 push, the GitHub Actions run is green end-to-end (this
-will be the first genuinely green CI). Locally: `pnpm lint && pnpm type-check && pnpm build`.
+will be the first genuinely green CI). Locally: `pnpm lint && pnpm type-check && pnpm build` —
+all green. Also required an unplanned but necessary fix: `cargo fmt --all -- --check` (part of
+CI) failed against the **entire pre-existing codebase**, not anything touched this stage — the
+whole repo is hand-formatted at 2-space indentation, but rustfmt's default is 4-space. Added a
+root `rustfmt.toml` (`tab_spaces = 2`) so the check validates against the project's actual
+established style instead of fighting it, then ran `cargo fmt --all` once to fix the handful of
+over-width lines (mine and a couple of pre-existing ones) that `--check` also flags regardless
+of indent width — a whitespace-only diff, confirmed by rerunning the full test suite (still
+20/20) and clippy (still clean) afterward.
 
 **Commit plan:** `fix ci workspace paths and eslint parser dependency`.
 
@@ -1160,6 +1186,16 @@ methodology finalization. **Every task here has an ask-the-user checkpoint** (§
 - **2026-07-08 — Docker Desktop started:** it was stopped at session start (a prior session had
   paused it deliberately); starting it was necessary to actually run and verify the Stage 1.4
   migrations against a live Postgres instead of only reading the generated SQL. Left running.
+- **2026-07-08 — `@typescript-eslint` version:** pinned `^8.63.0` (latest), not the drafted
+  `^7` — check the actual registry/peer-dep range before pinning, same lesson as `canonicalize`.
+- **2026-07-08 — shared eslint config was dead code:** `packages/config/eslint.config.js` had a
+  real bug (string `parser` invalid in flat config) that nothing ever caught because no package
+  actually consumes it — `apps/web` lints via `eslint-config-next` instead. Fixed the bug and
+  the dependency declaration; did *not* retrofit `lint` scripts onto the five packages that
+  don't have one, since that's a separate scope decision for whichever stage first needs it.
+- **2026-07-08 — added `rustfmt.toml` (`tab_spaces = 2`)** rather than reformatting the whole
+  codebase to rustfmt's 4-space default — the project's established style is 2-space, and CI's
+  new `cargo fmt --check` step needs to validate against that, not fight it.
 
 ## Deferred / post-launch
 

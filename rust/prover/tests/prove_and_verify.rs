@@ -8,15 +8,14 @@ use shakmaty::Color;
 
 /// Prove `fen` for `side` and run the resulting certificate through the
 /// verifier, returning the verifier's report.
-fn prove_and_verify(
-  fen: &str,
-  side: Option<Color>,
-) -> penumbra_verify::verifier::VerifyReport {
+fn prove_and_verify(fen: &str, side: Option<Color>) -> penumbra_verify::verifier::VerifyReport {
   let search = ProofNumberSearch::new(ProofSearchConfig::default());
   let outcome = search.prove(fen, side).expect("position parses");
   assert!(outcome.result.proven, "expected a forced win for {fen}");
 
-  let cert = outcome.certificate.expect("proved search yields a certificate");
+  let cert = outcome
+    .certificate
+    .expect("proved search yields a certificate");
   let json = cert.to_json_pretty();
 
   let verifier = CertificateVerifier::load_from_json(&json).expect("cert loads");

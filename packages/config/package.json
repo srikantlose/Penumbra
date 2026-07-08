@@ -2,6 +2,7 @@
   "name": "@penumbra/config",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Shared TypeScript and ESLint configurations",
   "exports": {
     "./tsconfig": "./tsconfig.base.json",
@@ -10,6 +11,8 @@
   "devDependencies": {
     "typescript": "^5.0.0",
     "@eslint/js": "^8.50.0",
+    "@typescript-eslint/eslint-plugin": "^8.63.0",
+    "@typescript-eslint/parser": "^8.63.0",
     "eslint": "^8.50.0"
   }
 }

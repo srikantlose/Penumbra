@@ -1,6 +1,6 @@
+use crate::error::VerifyError;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use crate::error::VerifyError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CertificateMetadata {
@@ -127,8 +127,7 @@ pub struct CertificateVerifier {
 
 impl CertificateVerifier {
   pub fn load_from_json(json: &str) -> Result<Self, VerifyError> {
-    let certificate: Certificate =
-      serde_json::from_str(json).map_err(VerifyError::Json)?;
+    let certificate: Certificate = serde_json::from_str(json).map_err(VerifyError::Json)?;
 
     if certificate.format_version != crate::FORMAT_VERSION {
       return Err(VerifyError::UnsupportedFormatVersion(
@@ -162,9 +161,7 @@ impl CertificateVerifier {
     let _root_node = self
       .nodes_by_id
       .get(&self.certificate.root_id)
-      .ok_or_else(|| {
-        VerifyError::InvalidCertificate("root node not found".to_string())
-      })?;
+      .ok_or_else(|| VerifyError::InvalidCertificate("root node not found".to_string()))?;
 
     let mut report = VerifyReport {
       valid: false,
@@ -200,7 +197,9 @@ impl CertificateVerifier {
     }
 
     if !is_valid_zobrist(&self.certificate.claim.zobrist) {
-      report.errors.push("Invalid zobrist hash in claim".to_string());
+      report
+        .errors
+        .push("Invalid zobrist hash in claim".to_string());
     }
 
     if !["win", "at_least_draw"].contains(&self.certificate.claim.value.as_str()) {
@@ -214,23 +213,35 @@ impl CertificateVerifier {
     // Validate node structure (moves, coverage, cycles)
     for (node_id, node) in &self.nodes_by_id {
       if !is_valid_zobrist(&node.zobrist) {
-        report.errors.push(format!("Invalid zobrist in node {}", node_id));
+        report
+          .errors
+          .push(format!("Invalid zobrist in node {}", node_id));
       }
 
       if !["or-node", "and-node", "terminal"].contains(&node.kind.as_str()) {
-        report.errors.push(format!("Invalid node kind in {}", node_id));
+        report
+          .errors
+          .push(format!("Invalid node kind in {}", node_id));
       }
 
       if node.kind != "terminal" && node.moves.is_empty() {
-        report.errors.push(format!("Non-terminal node {} has no moves", node_id));
+        report
+          .errors
+          .push(format!("Non-terminal node {} has no moves", node_id));
       }
 
       for mv in &node.moves {
         if !is_valid_uci(&mv.uci) {
-          report.errors.push(format!("Invalid UCI notation in node {}: {}", node_id, mv.uci));
+          report.errors.push(format!(
+            "Invalid UCI notation in node {}: {}",
+            node_id, mv.uci
+          ));
         }
         if !self.nodes_by_id.contains_key(&mv.child_id) {
-          report.errors.push(format!("Missing child node {} in move from {}", mv.child_id, node_id));
+          report.errors.push(format!(
+            "Missing child node {} in move from {}",
+            mv.child_id, node_id
+          ));
         }
       }
     }
@@ -298,12 +309,15 @@ impl CertificateVerifier {
 }
 
 fn is_valid_zobrist(zobrist: &str) -> bool {
-  zobrist.len() == 18 && zobrist.starts_with("0x") && zobrist[2..].chars().all(|c| c.is_ascii_hexdigit())
+  zobrist.len() == 18
+    && zobrist.starts_with("0x")
+    && zobrist[2..].chars().all(|c| c.is_ascii_hexdigit())
 }
 
 fn is_valid_uci(uci: &str) -> bool {
   let chars: Vec<char> = uci.chars().collect();
-  chars.len() >= 4 && chars.len() <= 5
+  chars.len() >= 4
+    && chars.len() <= 5
     && ('a'..='h').contains(&chars[0])
     && ('1'..='8').contains(&chars[1])
     && ('a'..='h').contains(&chars[2])

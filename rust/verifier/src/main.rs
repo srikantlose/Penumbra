@@ -18,19 +18,37 @@ enum Commands {
     #[arg(help = "Path to certificate file (.pnbcert)")]
     cert_path: PathBuf,
 
-    #[arg(long, help = "Path to Syzygy tablebase directory (wired up in the fortress track, Stage 2)")]
+    #[arg(
+      long,
+      help = "Path to Syzygy tablebase directory (wired up in the fortress track, Stage 2)"
+    )]
     syzygy: Option<PathBuf>,
 
-    #[arg(long, help = "Tablebase endpoint URL (not implemented yet; use --syzygy)")]
+    #[arg(
+      long,
+      help = "Tablebase endpoint URL (not implemented yet; use --syzygy)"
+    )]
     tb_endpoint: Option<String>,
 
-    #[arg(long, default_value_t = false, help = "Run in offline mode (equivalent to omitting --syzygy)")]
+    #[arg(
+      long,
+      default_value_t = false,
+      help = "Run in offline mode (equivalent to omitting --syzygy)"
+    )]
     offline: bool,
 
-    #[arg(long, default_value_t = false, help = "Skip move replay; only check certificate shape")]
+    #[arg(
+      long,
+      default_value_t = false,
+      help = "Skip move replay; only check certificate shape"
+    )]
     structural_only: bool,
 
-    #[arg(long, default_value_t = false, help = "Accept tablebase terminals on faith instead of probing (unsound; for inspection only)")]
+    #[arg(
+      long,
+      default_value_t = false,
+      help = "Accept tablebase terminals on faith instead of probing (unsound; for inspection only)"
+    )]
     assume_tb: bool,
   },
   Inspect {
@@ -82,7 +100,10 @@ fn main() -> ExitCode {
   }
 }
 
-fn verify_certificate(path: &PathBuf, opts: &VerifyOptions) -> Result<bool, Box<dyn std::error::Error>> {
+fn verify_certificate(
+  path: &PathBuf,
+  opts: &VerifyOptions,
+) -> Result<bool, Box<dyn std::error::Error>> {
   let content = fs::read_to_string(path)?;
 
   let verifier = CertificateVerifier::load_from_json(&content)?;
@@ -95,10 +116,20 @@ fn verify_certificate(path: &PathBuf, opts: &VerifyOptions) -> Result<bool, Box<
   println!("Claim: {}", report.claim);
   println!("Nodes: {}", report.node_count);
   println!("Terminals: {}", report.terminal_count);
-  println!("Mode: {}", if report.semantic { "semantic" } else { "structural-only" });
+  println!(
+    "Mode: {}",
+    if report.semantic {
+      "semantic"
+    } else {
+      "structural-only"
+    }
+  );
   println!("Probes: {}", report.probe_count);
   if report.assumed_probes > 0 {
-    println!("Assumed (unverified) tablebase terminals: {}", report.assumed_probes);
+    println!(
+      "Assumed (unverified) tablebase terminals: {}",
+      report.assumed_probes
+    );
   }
   println!("Elapsed: {}ms", report.elapsed_ms);
 

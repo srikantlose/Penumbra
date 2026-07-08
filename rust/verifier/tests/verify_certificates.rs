@@ -23,7 +23,11 @@ fn golden_kqpk_passes_structural_checks() {
     .verify_with(&structural_only())
     .expect("verify should not error");
 
-  assert!(report.valid, "expected valid certificate, got errors: {:?}", report.errors);
+  assert!(
+    report.valid,
+    "expected valid certificate, got errors: {:?}",
+    report.errors
+  );
   assert!(report.errors.is_empty());
   assert_eq!(report.node_count, 9);
   assert_eq!(report.terminal_count, 7);
@@ -50,7 +54,11 @@ fn golden_backrank_mate_in_one_passes_semantic_checks() {
   let verifier = CertificateVerifier::load_from_json(&json).expect("valid json");
   let report = verifier.verify().expect("verify should not error");
 
-  assert!(report.valid, "expected valid certificate, got errors: {:?}", report.errors);
+  assert!(
+    report.valid,
+    "expected valid certificate, got errors: {:?}",
+    report.errors
+  );
   assert_eq!(report.claim, "win white");
 }
 
@@ -60,7 +68,11 @@ fn golden_morphy_mate_in_two_passes_semantic_checks() {
   let verifier = CertificateVerifier::load_from_json(&json).expect("valid json");
   let report = verifier.verify().expect("verify should not error");
 
-  assert!(report.valid, "expected valid certificate, got errors: {:?}", report.errors);
+  assert!(
+    report.valid,
+    "expected valid certificate, got errors: {:?}",
+    report.errors
+  );
   assert_eq!(report.node_count, 16);
   assert_eq!(report.terminal_count, 7);
 }
@@ -72,7 +84,10 @@ fn mutation_missing_child_node_fails() {
   let report = verifier.verify().expect("verify should not error");
 
   assert!(!report.valid);
-  assert!(report.errors.iter().any(|e| e.contains("Missing child node")));
+  assert!(report
+    .errors
+    .iter()
+    .any(|e| e.contains("Missing child node")));
 }
 
 #[test]
@@ -82,7 +97,10 @@ fn mutation_cycle_in_win_fails() {
   let report = verifier.verify().expect("verify should not error");
 
   assert!(!report.valid);
-  assert!(report.errors.iter().any(|e| e.contains("Acyclic check failed")));
+  assert!(report
+    .errors
+    .iter()
+    .any(|e| e.contains("Acyclic check failed")));
 }
 
 #[test]
@@ -92,7 +110,14 @@ fn mutation_illegal_uci_fails_semantic_check() {
   let report = verifier.verify().expect("verify should not error");
 
   assert!(!report.valid);
-  assert!(report.errors.iter().any(|e| e.contains("illegal in the replayed position")), "{:?}", report.errors);
+  assert!(
+    report
+      .errors
+      .iter()
+      .any(|e| e.contains("illegal in the replayed position")),
+    "{:?}",
+    report.errors
+  );
 }
 
 #[test]
@@ -102,7 +127,14 @@ fn mutation_missing_and_branch_fails_coverage_check() {
   let report = verifier.verify().expect("verify should not error");
 
   assert!(!report.valid);
-  assert!(report.errors.iter().any(|e| e.contains("missing AND-node coverage")), "{:?}", report.errors);
+  assert!(
+    report
+      .errors
+      .iter()
+      .any(|e| e.contains("missing AND-node coverage")),
+    "{:?}",
+    report.errors
+  );
 }
 
 #[test]
@@ -112,7 +144,11 @@ fn mutation_wrong_node_zobrist_fails_semantic_check() {
   let report = verifier.verify().expect("verify should not error");
 
   assert!(!report.valid);
-  assert!(report.errors.iter().any(|e| e.contains("zobrist mismatch")), "{:?}", report.errors);
+  assert!(
+    report.errors.iter().any(|e| e.contains("zobrist mismatch")),
+    "{:?}",
+    report.errors
+  );
 }
 
 #[test]
@@ -122,7 +158,11 @@ fn mutation_fake_checkmate_terminal_fails_semantic_check() {
   let report = verifier.verify().expect("verify should not error");
 
   assert!(!report.valid);
-  assert!(report.errors.iter().any(|e| e.contains("not checkmate")), "{:?}", report.errors);
+  assert!(
+    report.errors.iter().any(|e| e.contains("not checkmate")),
+    "{:?}",
+    report.errors
+  );
 }
 
 #[test]
@@ -135,7 +175,11 @@ fn structural_only_mode_skips_semantic_errors() {
     .verify_with(&structural_only())
     .expect("verify should not error");
 
-  assert!(report.valid, "expected valid certificate, got errors: {:?}", report.errors);
+  assert!(
+    report.valid,
+    "expected valid certificate, got errors: {:?}",
+    report.errors
+  );
 }
 
 #[test]

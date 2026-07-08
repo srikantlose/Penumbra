@@ -333,7 +333,9 @@ impl<'a> Solver<'a> {
         to_move,
         kind: "or-node".to_string(),
         moves: vec![MoveEdge {
-          uci: node.moves[choice].to_uci(CastlingMode::Standard).to_string(),
+          uci: node.moves[choice]
+            .to_uci(CastlingMode::Standard)
+            .to_string(),
           child_id,
         }],
         terminal: None,

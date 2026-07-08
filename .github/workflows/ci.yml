@@ -29,19 +29,17 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v2
-        with:
-          version: 8
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           cache: 'pnpm'
 
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: rust
+          workspaces: .
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -61,13 +59,10 @@ jobs:
           DATABASE_URL: postgres://penumbra:penumbra@localhost/penumbra
 
       - name: Test (Rust)
-        run: cargo test --all
-        working-directory: rust
+        run: cargo test --workspace
 
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
-        working-directory: rust
 
       - name: Clippy
-        run: cargo clippy --all --all-targets
-        working-directory: rust
+        run: cargo clippy --workspace --all-targets

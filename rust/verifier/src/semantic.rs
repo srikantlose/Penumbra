@@ -212,7 +212,13 @@ impl CertificateVerifier {
   /// (the structural `check_acyclic` gate already rejected them before the
   /// semantic pass runs); `at_least_draw` certificates may legitimately
   /// confine play to a closed set of positions.
-  fn descend(&self, child_id: &str, child_pos: Chess, ctx: &mut SemanticCtx, report: &mut VerifyReport) {
+  fn descend(
+    &self,
+    child_id: &str,
+    child_pos: Chess,
+    ctx: &mut SemanticCtx,
+    report: &mut VerifyReport,
+  ) {
     if ctx.path.contains(child_id) {
       if self.certificate.claim.value == "at_least_draw" {
         return;
