@@ -718,22 +718,28 @@ holds 290 files ≈ 1 GB. **Done** 2026-07-08: 290 files, 984 MB, second run rep
 (or the claim-appropriate value). Discard any candidate that disagrees; pick the next from the
 family. Keep a scratch list of validated FENs before starting proofs.
 
-- [ ] **Tier A — machinery smoke (2–3 certs; root ≤5 men or immediate terminal):**
-  a KPK dead draw (defender holds the square — validate exact FEN via the endpoint), a
-  wrong-bishop + rook-pawn draw (`KBP(a/h)vK`, bishop not controlling the promotion corner,
-  defending king in/near the corner), and a stalemate-at-root cert.
-- [ ] **Tier B — shallow trees over TB terminals (3–4 certs; 6 men):** positions one or two
-  plies from liquidating into 3-4-5-man TB draws — e.g. wrong-bishop with one extra attacker
-  pawn that must be traded, opposite-colored-bishop single-pawn blockades.
-- [ ] **Tier C — genuine fortress cycles (3–4 certs; 6–9 men):** fully blocked pawn chains with
-  shuffling kings (family: `8/8/2k5/ppp5/PPP5/2K5/8/8 w - - 0 1` — validate!, every capture
-  line liquidates into 3-4-5 territory, king moves cycle via transposition terminals);
-  wrong-bishop cages where the defender shuttles between two safe squares. For ≤7-men
-  candidates cross-validate with the Lichess endpoint; 8+-men certs are the showcase (the PNS
-  proof is the evidence, the semantic verifier the check).
-- [ ] Store final certs in `rust/prover/examples/fortress/*.pnbcert` (committed). A short
-  `rust/prover/examples/fortress/README.md` table: FEN, claim, node count, terminal breakdown,
-  provenance (endpoint-validated / showcase).
+- [x] **Tier A — machinery smoke (4 certs; root ≤5 men, all resolve in 1 node):** KPK dead draw,
+  wrong-bishop + h-pawn draw (`KBPvK`, light bishop can't cover the dark h8 corner), a genuine
+  stalemate-at-root, and a Vancura-position `KRPvKR` draw. All 4 endpoint-validated
+  (`category: draw`) before proving.
+- [x] **Tier B — shallow trees over TB terminals (3 certs; 6 men):** two opposite-colored-bishop
+  single-pawn blockades (different king placements → different proof-tree sizes, 126 and 3725
+  search nodes) and an adjacent-file triple pawn chain that liquidates via a diagonal capture
+  into a 5-man draw. Root positions endpoint-validated.
+- [x] **Tier C — genuine fortress cycles (3 certs; 8–10 men):** the roadmap's suggested family
+  (`8/8/2k5/ppp5/PPP5/2K5/8/8 w - - 0 1`) turned out to be a **win**, not a draw, on endpoint
+  validation — several king placements in that family were tried and rejected before finding the
+  actual mechanism that works: pawns on *non-adjacent* files (no diagonal captures ever legal
+  for either side, unlike Tier B's adjacent-file chains), which forces the proof to close purely
+  by king-shuffle repetition. Two are pure-transposition showcases (7 and 9 transposition
+  terminals, zero tablebase dependency); the third mixes 2 transposition + 1 stalemate terminal.
+  8-10 men is beyond Lichess's 7-man table coverage, so validated via its per-move heuristic
+  instead of a whole-position category — confirmed the proof's actual root move matches the
+  endpoint's own `"category": "draw"` reply, not just some other move landing on a drawn
+  position.
+- [x] Stored in `rust/prover/examples/fortress/*.pnbcert` (10 certs, committed). Full
+  provenance table (FEN, claim side, search/cert node counts, terminal breakdown, validation
+  method) in `rust/prover/examples/fortress/README.md`.
 
 **Acceptance gate:**
 
@@ -746,6 +752,14 @@ cargo test --workspace                     # incl. fortress round-trips (skippin
 # → Valid: false ("tablebase terminal … no tablebase source") — soundness by default
 # ≥5 committed fortress certs, each verifying clean with --syzygy
 ```
+
+**Done** 2026-07-08: ran verbatim against `tierB_ocb_blockade_1` — `Valid: true, Probes: 9` with
+`--syzygy`, `Valid: false` (same "no tablebase source" message) without it. `cargo test
+--workspace`: 32/32 green (incl. the 4 fortress-round-trip tests across both crates, all
+detecting the tablebase directory and running for real, not skipping). All 10 committed certs
+individually confirmed `Valid: true` with `--syzygy`; the 7 with a tablebase dependency also
+confirmed `Valid: false` without it (the other 3 are pure transposition/stalemate proofs with no
+tablebase terminal to gate, so they pass either way — expected, not a soundness gap).
 
 **If it fails:** PNS explodes on a fortress candidate (node budget exhausted) → the position's
 defensive tree is too wide; prefer candidates with locked pawns (few legal moves). Probe errors
@@ -1262,6 +1276,24 @@ methodology finalization. **Every task here has an ask-the-user checkpoint** (§
 - **2026-07-08 — added `rustfmt.toml` (`tab_spaces = 2`)** rather than reformatting the whole
   codebase to rustfmt's 4-space default — the project's established style is 2-space, and CI's
   new `cargo fmt --check` step needs to validate against that, not fight it.
+- **2026-07-08 — Tier C fortress mechanism: non-adjacent-file pawn chains, not this doc's
+  suggested family.** `8/8/2k5/ppp5/PPP5/2K5/8/8 w - - 0 1` (and several king-placement variants
+  of it) validated as a **win**, not a draw, on the Lichess endpoint — the open ranks in front of
+  an *adjacent*-file pawn wall (3-wide, e.g. a/b/c) give the attacking king's AND-node full-width
+  board access to infiltrate around either flank, which also made naive attempts at this pattern
+  blow the 500k-2M node search budget without proving anything (both the win/loss outcome *and*
+  the tree-size explosion point the same way: this family just isn't a fortress). The mechanism
+  that actually works: pawns on **non-adjacent** files (b/d/f or every-other-file), which removes
+  every diagonal capture — with zero legal captures for either side, the only legal moves are
+  king shuffles, so the proof is forced to close by repetition rather than ever reaching a
+  tablebase leaf. Cross-validated one candidate two ways: Lichess's per-move heuristic for the
+  root position lists the proof's actual chosen move (`h1g1`) as `"category": "draw"` while the
+  alternatives are `"maybe-loss"` — the search and independent chess judgment agree not just on
+  the outcome but on which move holds it.
+- **2026-07-08 — Stage 2 (M2 fortress track) complete.** All of 2.1-2.4 done: Syzygy tablebases
+  fetched, prover `at_least_draw` + TB oracle + transposition terminals, verifier real Syzygy
+  probing, 10 committed fortress certs (4 Tier A + 3 Tier B + 3 Tier C) all verifying clean.
+  Milestone M2 is done. Next up per this roadmap is Stage 3 (`services/analysis` UCI worker).
 
 ## Deferred / post-launch
 

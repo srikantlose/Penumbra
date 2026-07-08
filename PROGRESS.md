@@ -317,7 +317,7 @@ penumbra/
   cert-schema TS tests, `db-smoke.mjs` against a real Postgres instance)
 - [x] M1: Golden test suite green; mutations fail with correct exit codes (`cargo test` in `rust/`, 4/4 passing; CLI exit codes confirmed manually)
 - [x] M2 (core): PNS prover emits forced-mate WIN certs that `penumbra-verify` accepts (`cargo test -p penumbra-prover`, 6/6; 3 example certs verify clean)
-- [ ] M2 (fortress): ~10 fortress `at_least_draw` certs generated and verified against Syzygy
+- [x] M2 (fortress): 10 fortress `at_least_draw` certs generated and verified against Syzygy (`cargo test --workspace`, 32/32; acceptance gate run verbatim, `Valid: true`/`Probes: 9` with `--syzygy`, `Valid: false` without)
 - [ ] M3: Fog reproducibility test (same FEN twice → byte-identical score)
 - [ ] M4: Import real Lichess game → analyze → fog timeline renders
 - [ ] M5: Position page shows provenance + eval history + fog
@@ -348,11 +348,11 @@ in `docs/ROADMAP.md` — that file is the forward-looking plan; this section jus
 
 ---
 
-**Next action:** Stage 1 (hardening) is done. Stage 2 (M2 fortress track) is mostly done:
-Syzygy tablebases fetched (`scripts/fetch-syzygy.mjs`, 290 files / 984 MB, gitignored), the
-prover now supports `--claim at_least_draw --syzygy <dir>` (real WDL leaf oracle + transposition
-terminals), and the verifier now supports `--syzygy <dir>` (real WDL probing, mismatches
-rejected). What's left in Stage 2 is 2.4: curate and commit ~10 (min 5) real fortress seed
-certificates across the roadmap's three tiers, each endpoint-validated and verified clean
-end-to-end. `docs/ROADMAP.md` has the full task-by-task plan through Stage 7 (launch) — treat it
-as the authoritative "what's next," not this section.
+**Next action:** Stage 1 (hardening) and Stage 2 (M2 fortress track) are both done — Syzygy
+tablebases fetched, prover `--claim at_least_draw --syzygy <dir>` (real WDL leaf oracle +
+transposition terminals), verifier `--syzygy <dir>` (real WDL probing), and 10 committed fortress
+seed certs across all three tiers (`rust/prover/examples/fortress/`), all verifying clean.
+Milestone M2 is complete. Next per `docs/ROADMAP.md` is Stage 3: `services/analysis`, the UCI
+orchestration worker that lands real engine evals + fog scores in Postgres. `docs/ROADMAP.md` has
+the full task-by-task plan through Stage 7 (launch) — treat it as the authoritative "what's
+next," not this section.
