@@ -1,0 +1,212 @@
+{
+  "format_version": "0.1",
+  "claim": {
+    "fen": "k6K/1p1p1p2/1P1P1P2/8/8/8/8/8 w - - 0 1",
+    "zobrist": "0xeeff992ccfa9c58d",
+    "value": "at_least_draw",
+    "side": "white"
+  },
+  "rules": "standard",
+  "root_id": "root",
+  "nodes": [
+    {
+      "id": "n4",
+      "zobrist": "0xeeff992ccfa9c58d",
+      "to_move": "white",
+      "kind": "terminal",
+      "terminal": {
+        "type": "transposition",
+        "value": "draw"
+      }
+    },
+    {
+      "id": "n7",
+      "zobrist": "0x5cf93aa584944a52",
+      "to_move": "white",
+      "kind": "terminal",
+      "terminal": {
+        "type": "transposition",
+        "value": "draw"
+      }
+    },
+    {
+      "id": "n15",
+      "zobrist": "0xbb1d7d4523fb3071",
+      "to_move": "black",
+      "kind": "terminal",
+      "terminal": {
+        "type": "stalemate",
+        "value": "draw"
+      }
+    },
+    {
+      "id": "n14",
+      "zobrist": "0x334382b95758b38c",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "d7c7",
+          "child_id": "n15"
+        }
+      ]
+    },
+    {
+      "id": "n13",
+      "zobrist": "0x4d5aaa6abf06e62b",
+      "to_move": "black",
+      "kind": "and-node",
+      "moves": [
+        {
+          "uci": "b8a8",
+          "child_id": "n14"
+        }
+      ]
+    },
+    {
+      "id": "n12",
+      "zobrist": "0xd366b53ce926f8d8",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "e7d7",
+          "child_id": "n13"
+        }
+      ]
+    },
+    {
+      "id": "n11",
+      "zobrist": "0x183657f68cad1e69",
+      "to_move": "black",
+      "kind": "and-node",
+      "moves": [
+        {
+          "uci": "c8b8",
+          "child_id": "n12"
+        }
+      ]
+    },
+    {
+      "id": "n10",
+      "zobrist": "0xe64f11c14c116182",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "f7e7",
+          "child_id": "n11"
+        }
+      ]
+    },
+    {
+      "id": "n9",
+      "zobrist": "0xbd3c0d2584d151b3",
+      "to_move": "black",
+      "kind": "and-node",
+      "moves": [
+        {
+          "uci": "d8c8",
+          "child_id": "n10"
+        }
+      ]
+    },
+    {
+      "id": "n8",
+      "zobrist": "0xccdac48b29df9cd2",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "g7f7",
+          "child_id": "n9"
+        }
+      ]
+    },
+    {
+      "id": "n6",
+      "zobrist": "0x97a9d86fe11face3",
+      "to_move": "black",
+      "kind": "and-node",
+      "moves": [
+        {
+          "uci": "c8b8",
+          "child_id": "n7"
+        },
+        {
+          "uci": "c8d8",
+          "child_id": "n8"
+        }
+      ]
+    },
+    {
+      "id": "n5",
+      "zobrist": "0x5bb65335427c769b",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "h8g7",
+          "child_id": "n6"
+        }
+      ]
+    },
+    {
+      "id": "n3",
+      "zobrist": "0x90e6b1ff27f7902a",
+      "to_move": "black",
+      "kind": "and-node",
+      "moves": [
+        {
+          "uci": "b8a8",
+          "child_id": "n4"
+        },
+        {
+          "uci": "b8c8",
+          "child_id": "n5"
+        }
+      ]
+    },
+    {
+      "id": "n2",
+      "zobrist": "0x5cf93aa584944a52",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "g7h8",
+          "child_id": "n3"
+        }
+      ]
+    },
+    {
+      "id": "n1",
+      "zobrist": "0x22e012766cca1ff5",
+      "to_move": "black",
+      "kind": "and-node",
+      "moves": [
+        {
+          "uci": "a8b8",
+          "child_id": "n2"
+        }
+      ]
+    },
+    {
+      "id": "root",
+      "zobrist": "0xeeff992ccfa9c58d",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "h8g7",
+          "child_id": "n1"
+        }
+      ]
+    }
+  ],
+  "dependencies": {},
+  "metadata": {
+    "producer": "penumbra-prover 0.1",
+    "timestamp": "2026-07-08T18:17:52Z"
+  }
+}

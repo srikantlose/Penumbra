@@ -1,0 +1,30 @@
+{
+  "format_version": "0.1",
+  "claim": {
+    "fen": "7k/8/6KP/8/8/8/8/1B6 b - - 0 1",
+    "zobrist": "0x60d0683202bbc643",
+    "value": "at_least_draw",
+    "side": "black"
+  },
+  "rules": "standard",
+  "root_id": "root",
+  "nodes": [
+    {
+      "id": "root",
+      "zobrist": "0x60d0683202bbc643",
+      "to_move": "black",
+      "kind": "terminal",
+      "terminal": {
+        "type": "tablebase",
+        "value": "draw"
+      }
+    }
+  ],
+  "dependencies": {
+    "tablebase": "syzygy"
+  },
+  "metadata": {
+    "producer": "penumbra-prover 0.1",
+    "timestamp": "2026-07-08T18:17:51Z"
+  }
+}

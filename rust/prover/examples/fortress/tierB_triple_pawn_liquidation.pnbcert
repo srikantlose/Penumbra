@@ -1,0 +1,78 @@
+{
+  "format_version": "0.1",
+  "claim": {
+    "fen": "7k/5ppp/5PPP/8/8/8/8/K7 w - - 0 1",
+    "zobrist": "0xa71aa08134740f82",
+    "value": "at_least_draw",
+    "side": "white"
+  },
+  "rules": "standard",
+  "root_id": "root",
+  "nodes": [
+    {
+      "id": "n4",
+      "zobrist": "0x801f16545e2c9b5c",
+      "to_move": "white",
+      "kind": "terminal",
+      "terminal": {
+        "type": "tablebase",
+        "value": "win"
+      }
+    },
+    {
+      "id": "n3",
+      "zobrist": "0x70d9450d0ab04d0c",
+      "to_move": "black",
+      "kind": "and-node",
+      "moves": [
+        {
+          "uci": "g8h7",
+          "child_id": "n4"
+        }
+      ]
+    },
+    {
+      "id": "n2",
+      "zobrist": "0x1cad4522dd2ff637",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "g6h7",
+          "child_id": "n3"
+        }
+      ]
+    },
+    {
+      "id": "n1",
+      "zobrist": "0x556761f121d742a0",
+      "to_move": "black",
+      "kind": "and-node",
+      "moves": [
+        {
+          "uci": "h8g8",
+          "child_id": "n2"
+        }
+      ]
+    },
+    {
+      "id": "root",
+      "zobrist": "0xa71aa08134740f82",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "h6g7",
+          "child_id": "n1"
+        }
+      ]
+    }
+  ],
+  "dependencies": {
+    "tablebase": "syzygy"
+  },
+  "metadata": {
+    "producer": "penumbra-prover 0.1",
+    "timestamp": "2026-07-08T18:17:52Z"
+  }
+}

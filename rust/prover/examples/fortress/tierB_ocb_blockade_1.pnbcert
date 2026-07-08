@@ -1,0 +1,262 @@
+{
+  "format_version": "0.1",
+  "claim": {
+    "fen": "8/8/3k4/3p4/3P4/3K4/8/1B4b1 w - - 0 1",
+    "zobrist": "0xa5165e34eef47064",
+    "value": "at_least_draw",
+    "side": "white"
+  },
+  "rules": "standard",
+  "root_id": "root",
+  "nodes": [
+    {
+      "id": "n3",
+      "zobrist": "0x6378192786e5debd",
+      "to_move": "black",
+      "kind": "terminal",
+      "terminal": {
+        "type": "tablebase",
+        "value": "draw"
+      }
+    },
+    {
+      "id": "n2",
+      "zobrist": "0x1e2b657b1006850f",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "a2d5",
+          "child_id": "n3"
+        }
+      ]
+    },
+    {
+      "id": "n5",
+      "zobrist": "0xac74d83a3e141a2b",
+      "to_move": "black",
+      "kind": "terminal",
+      "terminal": {
+        "type": "tablebase",
+        "value": "draw"
+      }
+    },
+    {
+      "id": "n4",
+      "zobrist": "0xd127a466a8f74199",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "a2d5",
+          "child_id": "n5"
+        }
+      ]
+    },
+    {
+      "id": "n7",
+      "zobrist": "0xcc6db6004e14cd2d",
+      "to_move": "black",
+      "kind": "terminal",
+      "terminal": {
+        "type": "tablebase",
+        "value": "draw"
+      }
+    },
+    {
+      "id": "n6",
+      "zobrist": "0xb13eca5cd8f7969f",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "a2d5",
+          "child_id": "n7"
+        }
+      ]
+    },
+    {
+      "id": "n8",
+      "zobrist": "0xf95d8991b5a79c47",
+      "to_move": "white",
+      "kind": "terminal",
+      "terminal": {
+        "type": "tablebase",
+        "value": "draw"
+      }
+    },
+    {
+      "id": "n10",
+      "zobrist": "0xc1ab4f8f2d65945f",
+      "to_move": "black",
+      "kind": "terminal",
+      "terminal": {
+        "type": "tablebase",
+        "value": "draw"
+      }
+    },
+    {
+      "id": "n9",
+      "zobrist": "0xbcf833d3bb86cfed",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "a2d5",
+          "child_id": "n10"
+        }
+      ]
+    },
+    {
+      "id": "n12",
+      "zobrist": "0x806173448cacaaf8",
+      "to_move": "black",
+      "kind": "terminal",
+      "terminal": {
+        "type": "tablebase",
+        "value": "draw"
+      }
+    },
+    {
+      "id": "n11",
+      "zobrist": "0xfd320f181a4ff14a",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "a2d5",
+          "child_id": "n12"
+        }
+      ]
+    },
+    {
+      "id": "n14",
+      "zobrist": "0x16822d7aea81c8c1",
+      "to_move": "black",
+      "kind": "terminal",
+      "terminal": {
+        "type": "tablebase",
+        "value": "draw"
+      }
+    },
+    {
+      "id": "n13",
+      "zobrist": "0x6bd151267c629373",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "a2d5",
+          "child_id": "n14"
+        }
+      ]
+    },
+    {
+      "id": "n16",
+      "zobrist": "0x4fff0944fad10768",
+      "to_move": "black",
+      "kind": "terminal",
+      "terminal": {
+        "type": "tablebase",
+        "value": "draw"
+      }
+    },
+    {
+      "id": "n15",
+      "zobrist": "0x32ac75186c325cda",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "a2d5",
+          "child_id": "n16"
+        }
+      ]
+    },
+    {
+      "id": "n18",
+      "zobrist": "0x8b7bd31addaad9b8",
+      "to_move": "black",
+      "kind": "terminal",
+      "terminal": {
+        "type": "tablebase",
+        "value": "draw"
+      }
+    },
+    {
+      "id": "n17",
+      "zobrist": "0xf628af464b49820a",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "a2d5",
+          "child_id": "n18"
+        }
+      ]
+    },
+    {
+      "id": "n1",
+      "zobrist": "0x8fc1dd745ce6e460",
+      "to_move": "black",
+      "kind": "and-node",
+      "moves": [
+        {
+          "uci": "g1f2",
+          "child_id": "n2"
+        },
+        {
+          "uci": "g1h2",
+          "child_id": "n4"
+        },
+        {
+          "uci": "g1e3",
+          "child_id": "n6"
+        },
+        {
+          "uci": "g1d4",
+          "child_id": "n8"
+        },
+        {
+          "uci": "d6c6",
+          "child_id": "n9"
+        },
+        {
+          "uci": "d6e6",
+          "child_id": "n11"
+        },
+        {
+          "uci": "d6c7",
+          "child_id": "n13"
+        },
+        {
+          "uci": "d6d7",
+          "child_id": "n15"
+        },
+        {
+          "uci": "d6e7",
+          "child_id": "n17"
+        }
+      ]
+    },
+    {
+      "id": "root",
+      "zobrist": "0xa5165e34eef47064",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "b1a2",
+          "child_id": "n1"
+        }
+      ]
+    }
+  ],
+  "dependencies": {
+    "tablebase": "syzygy"
+  },
+  "metadata": {
+    "producer": "penumbra-prover 0.1",
+    "timestamp": "2026-07-08T18:17:52Z"
+  }
+}
