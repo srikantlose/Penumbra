@@ -577,8 +577,25 @@ confirmed the fix by actually deleting every package's `dist/` and `.turbo` cach
 full local sequence (`type-check`, `lint`, `build`, `test`, plus all three Rust steps) end to
 end from clean before pushing again.
 
+**Third unplanned fix, same "watch the actual CI run" discipline:** the next push got past
+`Type check`/`Lint`/`Build` but failed at `Test (TypeScript)` with
+`packages/fog: pnpm run test exited (1)`. `@penumbra/fog` has zero test files yet, and its
+script (like `core`'s and `cert-schema`'s) was `"test": "node --test dist/**/*.test.js"`
+**unquoted** — on Node 20 (what CI was pinned to), an explicit glob argument that matches zero
+files apparently isn't handled the same forgiving way it is on newer Node (verified locally on
+Node 24.15.0: the identical unquoted-then-literal glob string, fed straight to `node --test`,
+gracefully reports "0 tests" whether or not anything matches — but that's Node 24's behavior,
+not proof of Node 20's). Rather than gamble on which Node version's `--test` glob support is
+responsible, fixed both contributing factors: quoted the glob in all three affected
+`package.json` scripts (`"node --test \"dist/**/*.test.js\""`) so a single consistent literal
+string always reaches Node's own glob engine regardless of shell — confirmed this reaches
+Node identically however `pnpm run test` invokes it — and bumped `actions/setup-node`'s
+`node-version` from 20 to 22, which separately resolves a GitHub-surfaced annotation warning
+that Node 20 support itself is deprecated on the platform.
+
 **Commit plan:** `fix ci workspace paths and eslint parser dependency`,
-`fix type-check task missing a build dependency in turbo`.
+`fix type-check task missing a build dependency in turbo`,
+`fix test script glob and bump ci to node 22`.
 
 **Stage 1 close-out:** update `PROGRESS.md` (hardening section: what shipped, the kqpk
 semantic-honesty note, zobrist migration note), tick this file's boxes, commit
