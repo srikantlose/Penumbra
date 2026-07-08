@@ -95,6 +95,9 @@ importers:
       '@penumbra/config':
         specifier: workspace:*
         version: link:../config
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
       typescript:
         specifier: ^5.0.0
         version: 5.9.3

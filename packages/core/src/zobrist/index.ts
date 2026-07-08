@@ -1,5 +1,17 @@
 import { parseFen } from 'chessops/fen';
+import { Chess } from 'chessops/chess';
 import { parseSquare } from 'chessops/util';
+import { POLYGLOT_RANDOM } from './polyglot-random.js';
+import { hasLegalEnPassantCapture } from '../internal/ep-legality.js';
+
+const ROLE_INDEX: Record<string, number> = {
+  pawn: 0,
+  knight: 1,
+  bishop: 2,
+  rook: 3,
+  queen: 4,
+  king: 5
+};
 
 const CASTLING_SQUARES = {
   whiteKing: parseSquare('h1')!,
@@ -8,99 +20,60 @@ const CASTLING_SQUARES = {
   blackQueen: parseSquare('a8')!
 };
 
-const ZOBRIST_PIECE_SQUARE = initPieceSquareTable();
-const ZOBRIST_CASTLING = initCastlingTable();
-const ZOBRIST_EN_PASSANT = initEnPassantTable();
-const ZOBRIST_SIDE = 0x823c73137e1786efn;
+// Offsets into POLYGLOT_RANDOM -- see polyglot-random.ts for the full layout.
+const CASTLING_OFFSET = 768; // white king-side, white queen-side, black king-side, black queen-side
+const EP_FILE_OFFSET = 772;
+const TURN_INDEX = 780;
 
-function initPieceSquareTable(): bigint[][] {
-  const table: bigint[][] = [];
-  for (let i = 0; i < 12; i++) {
-    table[i] = [];
-    for (let j = 0; j < 64; j++) {
-      table[i][j] = pseudoRandomBigInt(i * 64 + j);
-    }
-  }
-  return table;
-}
-
-function initCastlingTable(): bigint[] {
-  const table: bigint[] = [];
-  for (let i = 0; i < 16; i++) {
-    table[i] = pseudoRandomBigInt(768 + i);
-  }
-  return table;
-}
-
-function initEnPassantTable(): bigint[] {
-  const table: bigint[] = [];
-  for (let i = 0; i < 8; i++) {
-    table[i] = pseudoRandomBigInt(784 + i);
-  }
-  return table;
-}
-
-function pseudoRandomBigInt(index: number): bigint {
-  let seed = BigInt(index) * 6364136223846793005n + 1442695040888963407n;
-  const high = seed >> 32n;
-  const low = seed & 0xffffffffn;
-  return (high << 32n) | low;
-}
-
+/**
+ * Polyglot-compatible Zobrist hash of a position, matching shakmaty's
+ * `zobrist_hash::<Zobrist64>(EnPassantMode::Legal)` -- the call the Rust
+ * prover and verifier use when they stamp a certificate's `zobrist` field.
+ * Both implementations must agree bit-for-bit; see
+ * `test-fixtures/zobrist-vectors.json` for the cross-checked vectors.
+ */
 export function computeZobristHash(fen: string): bigint {
-  const board = parseFen(fen);
-  if (board.isErr) {
+  const parsed = parseFen(fen);
+  if (parsed.isErr) {
     throw new Error(`Invalid FEN: ${fen}`);
   }
+  const setup = parsed.value;
 
-  const setup = board.value;
+  const posResult = Chess.fromSetup(setup);
+  if (posResult.isErr) {
+    throw new Error(`Illegal position: ${fen}`);
+  }
+  const pos = posResult.value;
+
   let hash = 0n;
 
   for (let sq = 0; sq < 64; sq++) {
     const piece = setup.board.get(sq);
     if (piece) {
-      const pieceIndex = getPieceIndex(piece);
-      hash ^= ZOBRIST_PIECE_SQUARE[pieceIndex][sq];
+      const roleIdx = ROLE_INDEX[piece.role];
+      const pieceIdx = roleIdx * 2 + (piece.color === 'white' ? 1 : 0);
+      hash ^= POLYGLOT_RANDOM[64 * pieceIdx + sq];
     }
   }
 
-  const castlingIndex = computeCastlingIndex(setup.castlingRights);
-  hash ^= ZOBRIST_CASTLING[castlingIndex];
+  if (setup.castlingRights.has(CASTLING_SQUARES.whiteKing)) hash ^= POLYGLOT_RANDOM[CASTLING_OFFSET];
+  if (setup.castlingRights.has(CASTLING_SQUARES.whiteQueen)) hash ^= POLYGLOT_RANDOM[CASTLING_OFFSET + 1];
+  if (setup.castlingRights.has(CASTLING_SQUARES.blackKing)) hash ^= POLYGLOT_RANDOM[CASTLING_OFFSET + 2];
+  if (setup.castlingRights.has(CASTLING_SQUARES.blackQueen)) hash ^= POLYGLOT_RANDOM[CASTLING_OFFSET + 3];
 
-  if (setup.epSquare !== undefined && setup.epSquare >= 0) {
-    const file = setup.epSquare % 8;
-    hash ^= ZOBRIST_EN_PASSANT[file];
+  // Only XOR the en passant file when a legal en passant capture actually
+  // exists -- an ep square with no legal capturing pawn (e.g. pinned) must
+  // hash identically to a position with no ep square at all.
+  if (hasLegalEnPassantCapture(pos) && setup.epSquare !== undefined) {
+    const file = setup.epSquare & 0x7;
+    hash ^= POLYGLOT_RANDOM[EP_FILE_OFFSET + file];
   }
 
-  if (setup.turn === 'black') {
-    hash ^= ZOBRIST_SIDE;
+  if (setup.turn === 'white') {
+    hash ^= POLYGLOT_RANDOM[TURN_INDEX];
   }
 
   return hash;
-}
-
-function getPieceIndex(piece: { role: string; color: string }): number {
-  const roleMap: Record<string, number> = {
-    pawn: 0,
-    knight: 1,
-    bishop: 2,
-    rook: 3,
-    queen: 4,
-    king: 5
-  };
-
-  const baseIndex = roleMap[piece.role] ?? 0;
-  const colorOffset = piece.color === 'white' ? 0 : 6;
-  return baseIndex + colorOffset;
-}
-
-function computeCastlingIndex(castlingRights: { has(square: number): boolean }): number {
-  let index = 0;
-  if (castlingRights.has(CASTLING_SQUARES.whiteKing)) index |= 1;
-  if (castlingRights.has(CASTLING_SQUARES.whiteQueen)) index |= 2;
-  if (castlingRights.has(CASTLING_SQUARES.blackKing)) index |= 4;
-  if (castlingRights.has(CASTLING_SQUARES.blackQueen)) index |= 8;
-  return index;
 }
 
 export function zobristToHexString(hash: bigint): string {
