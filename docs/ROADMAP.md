@@ -602,6 +602,21 @@ semantic-honesty note, zobrist migration note), tick this file's boxes, commit
 `update progress notes for hardening pass`, **push** (pre-approved for stage close), verify CI
 goes green on GitHub (`gh run watch` or check the Actions tab).
 
+**Done 2026-07-08.** Confirmed via the GitHub Actions API (no `gh` CLI available in this
+environment) — run
+[28947002453](https://github.com/srikantlose/Penumbra/actions/runs/28947002453), commit
+`d0f25f3`: every step green (`Type check`, `Lint`, `Build`, `Test (TypeScript)`,
+`Test (Rust)`, `Check Rust formatting`, `Clippy`). This took three iterations to actually get
+green — two real bugs (turbo's `type-check` missing `dependsOn: ["^build"]`; an unquoted empty
+test glob failing on Node 20 but not on the Node 24 used for all local testing this session)
+were only caught by watching the pushed run itself, not by anything that could be reproduced
+by running commands locally in a long-lived dev environment with `dist/` already built and a
+newer Node than CI's pin. **Lesson for future stages:** a green local `pnpm build && pnpm test`
+is necessary but not sufficient evidence CI will pass — actually push and watch at least once
+per stage that touches shared tooling (turbo, CI config, package scripts), and prefer
+reproducing suspected environment-shaped bugs (stale build artifacts, tool version drift) over
+guessing from local output alone.
+
 ---
 
 ## Stage 2 — M2 remainder: fortress track (Syzygy + `at_least_draw`)

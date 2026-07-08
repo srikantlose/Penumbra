@@ -113,10 +113,16 @@ defects were fixed (full detail and rationale in `docs/ROADMAP.md` §Stage 1):
   for the first time in this project's history** and verified end-to-end with
   `scripts/db-smoke.mjs` (real insert chain, both triggers, the FK constraint, all exercised
   live, not just inspected as generated SQL).
-- **CI is genuinely green for the first time**: it previously couldn't pass as written (wrong
-  cargo working directory, a pnpm version pin conflicting with `packageManager`, node 18).
-  Fixed, plus a `rustfmt.toml` pinning the project's actual 2-space style so `cargo fmt --check`
-  validates against reality instead of the entire codebase.
+- **CI is genuinely green for the first time** (verified on GitHub, not just locally — see
+  [run 28947002453](https://github.com/srikantlose/Penumbra/actions/runs/28947002453)): it
+  previously couldn't pass as written (wrong cargo working directory, a pnpm version pin
+  conflicting with `packageManager`, node 18). Fixed, plus a `rustfmt.toml` pinning the
+  project's actual 2-space style so `cargo fmt --check` validates against reality instead of
+  the entire codebase. Getting an actual green run additionally caught two bugs invisible to
+  local testing (turbo's `type-check` task wasn't building workspace dependencies first;
+  `packages/fog`'s empty-glob test script only failed on the Node version CI pins, not the
+  newer one used for all local testing this session) — full detail in `docs/ROADMAP.md`'s
+  Stage 1 close-out notes.
 
 ## In-progress and next steps
 
