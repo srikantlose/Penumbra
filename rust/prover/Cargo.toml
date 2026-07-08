@@ -6,9 +6,21 @@ edition.workspace = true
 license.workspace = true
 description = "Penumbra proof-number search prover"
 
+[[bin]]
+name = "penumbra-prove"
+path = "src/main.rs"
+
+[lib]
+name = "penumbra_prover"
+path = "src/lib.rs"
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 thiserror.workspace = true
 shakmaty = "0.26"
+clap = { version = "4.4", features = ["derive"] }
+
+[dev-dependencies]
+penumbra-verify = { path = "../verifier" }

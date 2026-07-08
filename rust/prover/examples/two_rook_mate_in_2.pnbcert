@@ -1,0 +1,64 @@
+{
+  "format_version": "0.1",
+  "claim": {
+    "fen": "7k/8/8/8/8/8/R7/1R5K w - - 0 1",
+    "zobrist": "0x922d3d891e28da1d",
+    "value": "win",
+    "side": "white"
+  },
+  "rules": "standard",
+  "root_id": "root",
+  "nodes": [
+    {
+      "id": "n3",
+      "zobrist": "0xefc006affa8748c4",
+      "to_move": "black",
+      "kind": "terminal",
+      "terminal": {
+        "type": "checkmate",
+        "value": "win"
+      }
+    },
+    {
+      "id": "n2",
+      "zobrist": "0x204530a8bc61992d",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "a2h2",
+          "child_id": "n3"
+        }
+      ]
+    },
+    {
+      "id": "n1",
+      "zobrist": "0x8c79a9f73f551e7e",
+      "to_move": "black",
+      "kind": "and-node",
+      "moves": [
+        {
+          "uci": "h8h7",
+          "child_id": "n2"
+        }
+      ]
+    },
+    {
+      "id": "root",
+      "zobrist": "0x922d3d891e28da1d",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "b1g1",
+          "child_id": "n1"
+        }
+      ]
+    }
+  ],
+  "dependencies": {},
+  "metadata": {
+    "producer": "penumbra-prover 0.1",
+    "timestamp": "2026-07-08T01:40:25Z"
+  }
+}

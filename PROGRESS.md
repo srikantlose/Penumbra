@@ -4,8 +4,8 @@
 
 This document tracks the implementation status of Penumbra Phase 1 (MVP). The work is organized by milestone and includes both completed components and next steps.
 
-**As of:** 2026-07-07  
-**Status:** Foundations and core systems complete and verified end-to-end (full build/test pass); API/UI work begins  
+**As of:** 2026-07-08  
+**Status:** Foundations + core systems verified end-to-end; PNS prover now emits forced-mate certificates that round-trip through the verifier; web skeleton up in the locked retro design system  
 **Commits shipped:** 9
 
 ## Completed milestones
@@ -87,13 +87,38 @@ This document tracks the implementation status of Penumbra Phase 1 (MVP). The wo
 
 ## In-progress and next steps
 
-### M2: Prover + Fortress seeds (3 weeks)
+### 🟡 M2: Prover + Fortress seeds (3 weeks, PNS core delivered)
 
-Not yet started. Critical path:
-1. Fortress selection spike (go/no-go per candidate)
-2. Implement PNS (proof-number search) over AND/OR trees
-3. Generate ~10 fortress certificates (min 5)
-4. Verify each against Syzygy tablebases
+**Delivered (2026-07-08):**
+- Real proof-number search over AND/OR trees in `rust/prover` (`src/pns.rs`),
+  replacing the stub. OR nodes (claiming side) proved if any child wins; AND
+  nodes (opponent) proved only if every legal reply is covered. Terminals are
+  recognised directly — checkmate → win, stalemate/insufficient-material → not
+  a win — so no external tablebase is needed for forced mates.
+- `penumbra-prove` CLI (`src/main.rs`): `prove "<FEN>" [--side] [-o] [--max-nodes] [--time-ms]`,
+  exit 0/1 on proved/not-proved, certificate to stdout or file.
+- Proof-tree extraction to the v0.1 `.pnbcert` format (`src/certificate.rs`):
+  OR nodes emit the one winning move, AND nodes emit all replies, leaves emit
+  checkmate terminals. Certificates are acyclic by construction (a forced mate
+  makes monotonic progress), satisfying the verifier's `win` acyclicity rule.
+- Round-trip integration test (`tests/prove_and_verify.rs`, 6 tests): proves a
+  set of known mates, serializes each certificate, and feeds it straight through
+  `penumbra-verify`, asserting the report is valid. Includes a black-to-move
+  case and negative cases (dead draw → no certificate; bad FEN → error).
+- Reference certificates in `rust/prover/examples/`: back-rank mate-in-1,
+  Morphy's mate-in-2 (one AND node covering all 7 black replies, 16 nodes /
+  7 terminals), and a two-rook mate — each verifies clean.
+
+**Scope note:** the deliverable is **self-contained forced-mate WIN
+certificates** — a genuine end-to-end prove→verify loop. This is the core PNS
+milestone. The remaining M2 items below are follow-on because they need
+inputs the search doesn't yet model:
+
+**Still needed:**
+1. Fortress / `at_least_draw` certificates — need Syzygy tablebase terminals or
+   repetition/50-move closure (the search currently only bottoms out at mates)
+2. Syzygy tablebase probing in both prover (as leaf oracle) and verifier
+3. Generate ~10 fortress seed certificates (min 5) and verify against Syzygy
 
 ### M3 remainder: UCI orchestration
 
@@ -112,9 +137,89 @@ High-priority next work:
 
 ### M5: Web UI (positions, Frontier map)
 
-1. Position pages (provenance, eval history, fog, proof refs)
-2. Static Frontier map (SVG coastline + canvas overlay)
-3. Personal game journey plotting
+**Scaffolded (2026-07-07):** `apps/web` stood up as a real workspace package — Next.js (App
+Router) + Tailwind, wired into `@penumbra/config`. Route skeleton only (`/`, `/board`, `/fog`,
+`/positions`, `/frontier`), each rendering a placeholder `ScreenSlot` component pending real
+designs. No visual/design decisions made (per standing rule to defer to user-provided styles).
+A Google Stitch → code import pipeline is staged (`.mcp.json`, community MCP server vendored
+under gitignored `tools/`); the MCP connects and can list projects, but its API key can't
+authenticate the screen-content endpoints (Google requires an OAuth2 token there), so screens are
+being imported manually (Stitch UI → code export → pasted in) instead — see
+`docs/DEVELOPMENT.md` for setup.
+
+**First import:** `apps/web/src/components/stitch/ShaderBackground.tsx` — a persistent,
+mouse-interactive WebGL canvas background from the user's Stitch project ("Interactive Midnight
+Interface"), mounted once in the root layout so it survives route navigation. Verified rendering
+correctly (real WebGL context, zero console errors, content layers above it) via a Playwright
+screenshot check.
+
+**Design system decided (2026-07-08):** the project's Stitch designs turned out to contain two
+conflicting visual directions — a colorful "academic dark serif" system (from the project's
+`designMd`) and a stark monochrome black/white 8-bit retro system (`Press Start 2P` everywhere,
+0px border radius, dithered checkerboard fills, click-triggered screen-shake + pixel-spark
+effects). User confirmed **retro B&W is authoritative**. Wired as the shared baseline in
+`apps/web/tailwind.config.ts` (colors/radius/spacing/fontFamily/fontSize tokens) and
+`globals.css` (dither patterns, shake/spark keyframes). Home page (`/`) now holds real landing
+content (hero, Fog gauge, 3 feature cards) instead of the placeholder. `TopNavBar`, `Footer`, and
+`ClickEffects` (screen-shake + pixel-spark, sitewide per user's choice) are mounted in the root
+layout so they apply across every route. Verified via Playwright: fonts resolve correctly, click
+effects fire (shake class + 8 spark elements), zero console errors.
+
+**Known issue:** the logo `<img>` src is a Stitch-hosted preview URL
+(`lh3.googleusercontent.com/aida/...`) that fails to load cross-origin (`ERR_BLOCKED_BY_ORB`) —
+these are ephemeral/CORP-restricted, not meant for hotlinking. Needs a real logo asset downloaded
+and hosted locally (`public/`) before this ships. A second Stitch-hosted image (a user avatar on
+the Analysis page) has the same problem.
+
+**Analysis/board screen imported (2026-07-08):** `/board` now holds the real Analysis page —
+persistent `EngineSidebar` (analysis-scoped, not sitewide), static demo chessboard with a
+radial-gradient "fog" vignette, Fog Timeline bar, Fog Index + Truth Status cards, an Engine
+Ladder table, and an Archaeology List with PROVEN/EVALUATED move badges. `TopNavBar` gained
+real active-tab awareness (`usePathname()`) — ANALYSIS now underlines correctly on `/board`.
+
+This screen's own embedded design tokens (JetBrains Mono, soft dark-gray palette) **conflicted**
+with the locked retro B&W/Press-Start-2P system — per standing instruction, the layout was kept
+but remapped onto the existing shared tokens rather than adopting this screen's values. Doing so
+surfaced a real bug: a 2-column stat grid ("Disagreement/Volatility/Criticality") that fit fine
+in the original's narrower JetBrains Mono started visually overlapping/garbling text
+(`Press Start 2P` is much wider per character) — fixed by switching that block to stacked
+`flex justify-between` rows at the design system's standard `data-mono` size. Lesson: importing
+future screens onto the locked system needs a check for exactly this kind of overflow, not just a
+class-name find/replace.
+
+**Remaining routes built out from spec, not from screens (2026-07-08):** user clarified that
+imported Stitch screens are a **style reference only** — specific buttons/tabs/nav items are
+disposable, and pages without a matching screen shouldn't wait on one. Built directly from
+`PROGRESS.md`/`docs/DEVELOPMENT.md`'s own feature descriptions and the real methodology docs,
+in the locked design system:
+- **`/frontier`** — the Frontier Map: a jagged SVG "coastline" (proven territory above, fog
+  below) with a canvas-drawn noise texture (`FrontierCanvas.tsx`) over the fog region, plus a
+  few landmark markers (`KPvK`, `KRvKB`, the 7-piece tablebase boundary) tying it directly to the
+  Fog Index's tablebase-distance component.
+- **`/positions`** — position detail: FEN + Zobrist header, provenance panel, reused
+  `FogIndexCard`/`TruthStatusCard` (see below), an eval-history table, and a proof-reference
+  panel with a download-certificate button.
+- **`/proofs`** (new route, not in the original stub set) — certificate table (claim/FEN/SHA256)
+  plus a hash-chained ledger list, pulling real field names/format from
+  `docs/CERTIFICATE_FORMAT.md`.
+- **`/methodology`** (new route) — the actual Fog Index v0.1 formula, all five components with
+  their real formulas, the real calibration percentile table, and the certificate format's
+  AND/OR/cycle-discipline rules — sourced directly from `docs/FOG_INDEX_METHODOLOGY.md` and
+  `docs/CERTIFICATE_FORMAT.md`, not invented.
+- **Removed `/fog`** as a standalone route — redundant with the Fog Timeline already embedded
+  contextually on `/board`, and not a real nav destination.
+- Extracted `FogIndexCard` and `TruthStatusCard` as shared components (now used on both `/board`
+  and `/positions`) rather than duplicating the same markup a second time.
+- **Real bug fixed:** `TopNavBar` was using plain `<a>` tags for internal routes, which forces a
+  full page reload on every nav click — tearing down and restarting the WebGL shader background
+  each time, undermining the "persistent across every screen" requirement. Switched to `next/link`
+  so the root layout (and the shader) stays mounted across client-side navigation. Also made the
+  logo a `Link` back to `/`.
+- `PROOFS` and `METHODOLOGY` nav tabs now point at real routes instead of `#`.
+
+1. Replace both placeholder logo/avatar images with locally hosted assets
+2. Import any remaining specific Stitch screens if/when the user sends more (style reference only)
+3. Personal game journey plotting (M5 remainder)
 
 ### M6: API + launch
 
@@ -129,7 +234,7 @@ High-priority next work:
 ```
 penumbra/
 ├─ apps/
-│  ├─ web/          # Next.js: UI, board, analysis (TBD)
+│  ├─ web/          # 🟡 Next.js + Tailwind, retro 8-bit design system locked; 6 routes built
 │  └─ api/          # Fastify: public API v1, BFF (TBD)
 ├─ services/
 │  └─ analysis/     # Worker: UCI, fog computation (TBD)
@@ -141,7 +246,7 @@ penumbra/
 │  └─ config/       # ✅ shared tsconfig, eslint
 ├─ rust/
 │  ├─ verifier/     # ✅ penumbra-verify CLI
-│  └─ prover/       # 🟡 PNS implementation (TBD)
+│  └─ prover/       # 🟡 penumbra-prove CLI: PNS forced-mate certs (fortress TBD)
 ├─ docs/            # ✅ specs, methodology
 └─ infra/           # ✅ docker-compose
 ```
@@ -169,7 +274,8 @@ penumbra/
 ## Verification checklist (per milestone)
 
 - [x] M1: Golden test suite green; mutations fail with correct exit codes (`cargo test` in `rust/`, 4/4 passing; CLI exit codes confirmed manually)
-- [ ] M2: ~10 fortress certs generated and verified end-to-end
+- [x] M2 (core): PNS prover emits forced-mate WIN certs that `penumbra-verify` accepts (`cargo test -p penumbra-prover`, 6/6; 3 example certs verify clean)
+- [ ] M2 (fortress): ~10 fortress `at_least_draw` certs generated and verified against Syzygy
 - [ ] M3: Fog reproducibility test (same FEN twice → byte-identical score)
 - [ ] M4: Import real Lichess game → analyze → fog timeline renders
 - [ ] M5: Position page shows provenance + eval history + fog
@@ -197,4 +303,4 @@ penumbra/
 
 ---
 
-**Next action:** Start M2 fortress selection spike or continue with M3 (UCI orchestration). Both are critical paths that can run in parallel.
+**Next action:** M2's PNS core is done (forced-mate certs prove→verify end-to-end). Next is either the M2 fortress track (add Syzygy probing so the prover can bottom out at tablebase draws/wins and emit `at_least_draw` fortress certs) or M3 (UCI orchestration). Both are critical paths that can run in parallel.
