@@ -18,10 +18,7 @@ enum Commands {
     #[arg(help = "Path to certificate file (.pnbcert)")]
     cert_path: PathBuf,
 
-    #[arg(
-      long,
-      help = "Path to Syzygy tablebase directory (wired up in the fortress track, Stage 2)"
-    )]
+    #[arg(long, help = "Path to a Syzygy tablebase directory")]
     syzygy: Option<PathBuf>,
 
     #[arg(
@@ -63,22 +60,30 @@ fn main() -> ExitCode {
   let result = match cli.command {
     Commands::Verify {
       cert_path,
-      syzygy: _,
+      syzygy,
       tb_endpoint,
-      offline: _,
+      offline,
       structural_only,
       assume_tb,
     } => {
       if tb_endpoint.is_some() {
-        eprintln!("--tb-endpoint is not implemented yet; use --syzygy (Stage 2) instead");
+        eprintln!("--tb-endpoint is not implemented yet; use --syzygy instead");
       }
+      let tb = if offline {
+        if syzygy.is_some() || assume_tb {
+          eprintln!("--offline overrides --syzygy/--assume-tb; verifying with no tablebase source");
+        }
+        TablebasePolicy::Forbid
+      } else if let Some(dir) = syzygy {
+        TablebasePolicy::Syzygy(dir)
+      } else if assume_tb {
+        TablebasePolicy::Assume
+      } else {
+        TablebasePolicy::Forbid
+      };
       let opts = VerifyOptions {
         semantic: !structural_only,
-        tb: if assume_tb {
-          TablebasePolicy::Assume
-        } else {
-          TablebasePolicy::Forbid
-        },
+        tb,
       };
       verify_certificate(&cert_path, &opts)
     }

@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use penumbra_verify::{CertificateVerifier, TablebasePolicy, VerifyOptions};
 
 fn load(path: &str) -> String {
@@ -9,6 +11,10 @@ fn structural_only() -> VerifyOptions {
     semantic: false,
     tb: TablebasePolicy::Forbid,
   }
+}
+
+fn syzygy_dir() -> PathBuf {
+  Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tablebases/syzygy/3-4-5")
 }
 
 /// The kqpk fixture predates semantic verification: its zobrists and moves
@@ -188,4 +194,61 @@ fn rejects_unsupported_format_version() {
   let result = CertificateVerifier::load_from_json(&json);
 
   assert!(result.is_err());
+}
+
+/// A real `at_least_draw` certificate (KPvK, defender's king holding the
+/// square directly in front of the pawn -- confirmed `category: draw` at
+/// https://tablebase.lichess.ovh/standard?fen=8/8/8/8/8/2k5/2P5/2K5%20b%20-%20-%200%201),
+/// produced by `penumbra-prove --claim at_least_draw --syzygy`. Skips if the
+/// tablebases (~1 GB, not part of the repo) aren't present on disk.
+#[test]
+fn golden_kpvk_fortress_draw_verifies_with_syzygy() {
+  let dir = syzygy_dir();
+  if !dir.exists() {
+    eprintln!("skipping: no tablebases at {}", dir.display());
+    return;
+  }
+
+  let json = load("tests/golden/kpvk_fortress_draw.json");
+  let verifier = CertificateVerifier::load_from_json(&json).expect("valid json");
+  let report = verifier
+    .verify_with(&VerifyOptions {
+      semantic: true,
+      tb: TablebasePolicy::Syzygy(dir),
+    })
+    .expect("verify should not error");
+
+  assert!(report.valid, "errors: {:?}", report.errors);
+  assert_eq!(report.claim, "at_least_draw black");
+  assert!(report.probe_count >= 1);
+}
+
+/// Same fixture with the terminal's declared value flipped from `draw` to
+/// `win`. A real Syzygy probe must catch the lie.
+#[test]
+fn mutation_tablebase_value_flip_fails_with_syzygy() {
+  let dir = syzygy_dir();
+  if !dir.exists() {
+    eprintln!("skipping: no tablebases at {}", dir.display());
+    return;
+  }
+
+  let json = load("tests/mutations/tablebase_value_flip.json");
+  let verifier = CertificateVerifier::load_from_json(&json).expect("valid json");
+  let report = verifier
+    .verify_with(&VerifyOptions {
+      semantic: true,
+      tb: TablebasePolicy::Syzygy(dir),
+    })
+    .expect("verify should not error");
+
+  assert!(!report.valid);
+  assert!(
+    report
+      .errors
+      .iter()
+      .any(|e| e.contains("tablebase probe failed") && e.contains("declares value")),
+    "{:?}",
+    report.errors
+  );
 }

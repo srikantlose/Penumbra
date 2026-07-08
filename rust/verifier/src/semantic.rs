@@ -26,9 +26,11 @@ use shakmaty::uci::Uci;
 use shakmaty::zobrist::{Zobrist64, ZobristHash};
 use shakmaty::{CastlingMode, Chess, Color, EnPassantMode, Position};
 
+use crate::error::VerifyError;
+use crate::tb::{self, TbOracle};
 use crate::verifier::{
-  CertificateMove, CertificateNode, CertificateVerifier, TablebasePolicy, VerifyOptions,
-  VerifyReport,
+  CertificateMove, CertificateNode, CertificateTerminal, CertificateVerifier, TablebasePolicy,
+  VerifyOptions, VerifyReport,
 };
 
 /// Traversal state threaded through the recursive replay. Bundled into one
@@ -44,6 +46,11 @@ struct SemanticCtx<'a> {
   path_zobrists: HashSet<String>,
   /// Node ids that have already passed every check (DAG sharing memo).
   verified: HashSet<String>,
+  /// Built once per verify pass under `TablebasePolicy::Syzygy` so table
+  /// files aren't reopened per terminal. `Err` records a load failure (bad
+  /// path, empty directory) so every tablebase terminal reports it instead
+  /// of retrying.
+  tb: Option<Result<TbOracle, String>>,
 }
 
 impl CertificateVerifier {
@@ -73,12 +80,18 @@ impl CertificateVerifier {
       return;
     }
 
+    let tb = match &opts.tb {
+      TablebasePolicy::Syzygy(dir) => Some(TbOracle::new(dir)),
+      TablebasePolicy::Forbid | TablebasePolicy::Assume => None,
+    };
+
     let mut ctx = SemanticCtx {
       claiming_side,
       opts,
       path: HashSet::new(),
       path_zobrists: HashSet::new(),
       verified: HashSet::new(),
+      tb,
     };
 
     self.verify_node(&self.certificate.root_id, root_pos, &mut ctx, report);
@@ -289,7 +302,7 @@ impl CertificateVerifier {
           ));
         }
       }
-      "tablebase" => match ctx.opts.tb {
+      "tablebase" => match &ctx.opts.tb {
         TablebasePolicy::Forbid => {
           report.errors.push(format!(
             "terminal {} is a tablebase terminal but no tablebase source is configured (pass --syzygy or --assume-tb)",
@@ -298,6 +311,9 @@ impl CertificateVerifier {
         }
         TablebasePolicy::Assume => {
           report.assumed_probes += 1;
+        }
+        TablebasePolicy::Syzygy(_) => {
+          self.verify_tablebase_terminal(node_id, terminal, pos, ctx, report);
         }
       },
       "transposition" => {
@@ -320,6 +336,56 @@ impl CertificateVerifier {
           "terminal {} has an unrecognized terminal type '{}'",
           node_id, other
         ));
+      }
+    }
+  }
+
+  fn verify_tablebase_terminal(
+    &self,
+    node_id: &str,
+    terminal: &CertificateTerminal,
+    pos: &Chess,
+    ctx: &SemanticCtx,
+    report: &mut VerifyReport,
+  ) {
+    let declared_value = match &terminal.value {
+      Some(v) => v.as_str(),
+      None => {
+        report.errors.push(format!(
+          "terminal {} is a tablebase terminal with no declared value",
+          node_id
+        ));
+        return;
+      }
+    };
+
+    let oracle = match &ctx.tb {
+      Some(Ok(oracle)) => oracle,
+      Some(Err(e)) => {
+        report
+          .errors
+          .push(VerifyError::TablebaseError(format!("terminal {node_id}: {e}")).to_string());
+        return;
+      }
+      None => unreachable!("verify_tablebase_terminal only runs under TablebasePolicy::Syzygy"),
+    };
+
+    match oracle.probe(pos, ctx.claiming_side) {
+      Ok(wdl) => {
+        report.probe_count += 1;
+        if !tb::wdl_matches(wdl, &self.certificate.claim.value, declared_value) {
+          report.errors.push(
+            VerifyError::TablebaseError(format!(
+              "terminal {node_id} declares value '{declared_value}' but the probe says {wdl:?}"
+            ))
+            .to_string(),
+          );
+        }
+      }
+      Err(e) => {
+        report
+          .errors
+          .push(VerifyError::TablebaseError(format!("terminal {node_id}: {e}")).to_string());
       }
     }
   }

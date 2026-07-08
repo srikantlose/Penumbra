@@ -1,6 +1,7 @@
 use crate::error::VerifyError;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CertificateMetadata {
@@ -70,13 +71,14 @@ pub struct CertificateDependencies {
 /// `Forbid` (the default) is the sound choice: a certificate that leans on a
 /// tablebase claim without a configured source is rejected rather than
 /// trusted. `Assume` exists for inspecting/debugging certs before a real
-/// tablebase is wired up (Stage 2 adds a `Syzygy(PathBuf)` variant that
-/// actually probes).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// tablebase is wired up. `Syzygy` actually probes the loaded tables and
+/// checks the result against the terminal's declared value.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum TablebasePolicy {
   #[default]
   Forbid,
   Assume,
+  Syzygy(PathBuf),
 }
 
 #[derive(Debug, Clone)]
