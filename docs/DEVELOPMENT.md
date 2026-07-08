@@ -48,6 +48,30 @@ pnpm --filter db run migrate
 pnpm dev
 ```
 
+### Design import (Google Stitch)
+
+There's no official Google-published Stitch MCP server; `.mcp.json` points at a community server
+vendored (not committed) under `tools/stitch-mcp-server`. Treat any such server as untrusted
+until reviewed — it receives a Google-account credential.
+
+```bash
+# One-time setup
+mkdir tools && cd tools
+git clone https://github.com/oogleyskr/stitch-mcp-server.git
+cd stitch-mcp-server && npm install && npm run build   # produces dist/index.js
+
+# Get a key: stitch.withgoogle.com -> profile menu -> API key -> Create key
+cp .env.local.example .env.local   # fill in STITCH_API_KEY
+```
+
+Restart Claude Code, run `/mcp` to confirm `stitch` connects, then e.g. "List my Stitch
+projects." Import a screen with `get_screen_code` + `screen_to_react` (or bulk via
+`export_all_screens` / `build_site`), and drop the result into
+`apps/web/src/components/stitch/`, replacing the matching route's `ScreenSlot` placeholder.
+
+No key yet? Stitch's built-in export needs no server: open the screen, click the code icon
+(`< >`), choose React, and paste the same way.
+
 ## Conventions
 
 ### Commit messages

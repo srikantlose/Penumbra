@@ -27,3 +27,10 @@ CLAUDE.md
 *.tmp
 .turbo/
 .pnpm-store/
+
+# Vendored third-party MCP servers (not part of this project; rebuilt locally, not committed)
+tools/
+
+# Session-scoped agent state (machine-local, regenerated freely)
+.stitch-project.json
+HANDOFF.md
