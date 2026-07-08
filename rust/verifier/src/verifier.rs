@@ -108,6 +108,13 @@ pub struct VerifyReport {
   pub assumed_probes: usize,
   /// Whether the semantic (move-replay) pass ran.
   pub semantic: bool,
+  /// `0x` + 64 lowercase hex: `SHA256(canonical_json)`, the certificate's
+  /// identity per `docs/CERTIFICATE_FORMAT.md`. Empty if the certificate's
+  /// JSON falls outside v0.1's canonical value domain (see
+  /// `hash::certificate_sha256`) -- that failure is also pushed into
+  /// `errors`, since an uncanonicalizable certificate has no well-defined
+  /// identity.
+  pub sha256: String,
   pub elapsed_ms: u128,
   pub errors: Vec<String>,
 }
@@ -115,6 +122,7 @@ pub struct VerifyReport {
 pub struct CertificateVerifier {
   pub(crate) certificate: Certificate,
   pub(crate) nodes_by_id: HashMap<String, CertificateNode>,
+  raw_json: String,
 }
 
 impl CertificateVerifier {
@@ -136,6 +144,7 @@ impl CertificateVerifier {
     Ok(CertificateVerifier {
       certificate,
       nodes_by_id,
+      raw_json: json.to_string(),
     })
   }
 
@@ -168,9 +177,15 @@ impl CertificateVerifier {
       probe_count: 0,
       assumed_probes: 0,
       semantic: opts.semantic,
+      sha256: String::new(),
       elapsed_ms: 0,
       errors: vec![],
     };
+
+    match crate::hash::certificate_sha256(&self.raw_json) {
+      Ok(sha256) => report.sha256 = sha256,
+      Err(e) => report.errors.push(e.to_string()),
+    }
 
     // Count terminals
     for node in &self.certificate.nodes {

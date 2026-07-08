@@ -15,7 +15,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@penumbra/core": "workspace:*"
+    "@penumbra/core": "workspace:*",
+    "canonicalize": "^3.0.0"
   },
   "devDependencies": {
     "@penumbra/config": "workspace:*",

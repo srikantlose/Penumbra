@@ -1,35 +1,35 @@
 import crypto from 'crypto';
+import canonicalize from 'canonicalize';
 
-export function canonicalizeJSON(obj: any): string {
-  return JSON.stringify(sortKeysRecursive(obj));
+/**
+ * RFC 8785 (JSON Canonicalization Scheme) serialization. Certificate
+ * identity is defined as SHA256 of this output, so it must be byte-for-byte
+ * identical to what the Rust verifier computes (see
+ * `rust/verifier/src/hash.rs`, which re-serializes a parsed `serde_json::Value`
+ * -- key-sorted by construction -- rather than implementing JCS itself).
+ *
+ * v0.1 certificates only ever contain ASCII strings and integers, where
+ * JCS's number/string canonicalization rules are trivially satisfied by any
+ * sensible serializer; this restriction (documented in
+ * docs/CERTIFICATE_FORMAT.md) is what lets two independently-written
+ * canonicalizers agree without both implementing the full ECMAScript
+ * number-formatting algorithm RFC 8785 mandates for the general case.
+ */
+export function canonicalizeJSON(obj: unknown): string {
+  const result = canonicalize(obj);
+  if (result === undefined) {
+    throw new Error('Cannot canonicalize a value that serializes to undefined');
+  }
+  return result;
 }
 
-function sortKeysRecursive(obj: any): any {
-  if (Array.isArray(obj)) {
-    return obj.map(sortKeysRecursive);
-  }
-
-  if (obj !== null && typeof obj === 'object') {
-    const sorted: Record<string, any> = {};
-    const keys = Object.keys(obj).sort();
-
-    for (const key of keys) {
-      sorted[key] = sortKeysRecursive(obj[key]);
-    }
-
-    return sorted;
-  }
-
-  return obj;
-}
-
-export function computeCertificateSHA256(cert: any): string {
+export function computeCertificateSHA256(cert: unknown): string {
   const canonical = canonicalizeJSON(cert);
   const hash = crypto.createHash('sha256').update(canonical).digest('hex');
   return '0x' + hash;
 }
 
-export function verifyCertificateIntegrity(cert: any, expectedHash: string): boolean {
+export function verifyCertificateIntegrity(cert: unknown, expectedHash: string): boolean {
   const computed = computeCertificateSHA256(cert);
   return computed === expectedHash;
 }

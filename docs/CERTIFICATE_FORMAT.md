@@ -178,6 +178,17 @@ Certificate identity = `SHA256(canonical_json)` (hex string, prefixed `0x`).
 
 The verifier computes the hash and reports it. Certificates are matched against a trusted registry (the Ledger, Phase 3) by this hash.
 
+**Canonical value domain:** v0.1 certificates are restricted to ASCII strings and integers — no
+floating-point numbers, no non-ASCII characters. Every field in this spec (`fen`, `zobrist`,
+`uci`, ids, enum values, `dtm`, timestamps) already satisfies this. The restriction exists so
+that two independently-written canonicalizers can agree without either needing to implement
+RFC 8785's full ECMAScript-derived number-formatting algorithm: the reference implementations
+are `packages/cert-schema` (TypeScript, via the `canonicalize` library) and `rust/verifier`
+(Rust, via `serde_json::Value` re-serialization — its default map type is key-sorted, so no
+separate canonicalization step is needed once the value domain is enforced). A certificate
+containing a float or a non-ASCII string is rejected as having no well-defined identity, rather
+than hashed inconsistently.
+
 ## Verification algorithm
 
 ### Input

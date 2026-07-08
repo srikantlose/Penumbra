@@ -1,0 +1,14 @@
+[
+  {
+    "file": "rust/prover/examples/back_rank_mate_in_1.pnbcert",
+    "sha256": "0x5cc66f27c58b2ab98f84f2c4dcda149336067a7a435eae471fe0ae19b3bc164d"
+  },
+  {
+    "file": "rust/prover/examples/morphy_mate_in_2.pnbcert",
+    "sha256": "0xcc2ad24351c66918ddebfb1a8a63c815d1f81c5d9e3a781b53060abe4dd59c48"
+  },
+  {
+    "file": "rust/prover/examples/two_rook_mate_in_2.pnbcert",
+    "sha256": "0xb2c5e262770b77bd4f70ff42ad52d149b59a98c892d62cd73303e537dde12eed"
+  }
+]

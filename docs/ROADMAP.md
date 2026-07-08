@@ -379,34 +379,45 @@ RFC 8785). The Rust verifier computes no hash at all, yet cert identity is defin
 
 **Tasks:**
 
-- [ ] Add npm dep `canonicalize@^2.0.0` to `packages/cert-schema`; `canonicalizeJSON(obj)`
-  delegates to it (keep the exported signature; keep `computeCertificateSHA256`,
-  `verifyCertificateIntegrity`, `parseHexHash` signatures unchanged).
-- [ ] Add `rust/verifier/src/hash.rs`:
-  `pub fn certificate_sha256(raw_json: &str) -> Result<String, VerifyError>` — parse into
-  `serde_json::Value`, walk it and **reject any float or non-ASCII string** with a clear error
-  (v0.1 value-domain guard), re-serialize with `serde_json::to_string` (default `Value` objects
-  are BTreeMap-backed ⇒ key-sorted, minimal separators — byte-identical to JCS under the
-  ASCII+integer restriction), sha256 (the `sha2` dep is already declared and unused), return
-  `"0x" + 64 lowercase hex`.
-- [ ] Wire into the CLI: `verify` and `inspect` print `SHA256: 0x…`; `VerifyReport` gains
-  `pub sha256: String`.
-- [ ] Cross-impl fixture `packages/cert-schema/test-fixtures/hash-vectors.json`:
-  `[{ "file": "<repo-relative cert path>", "sha256": "0x..." }]` for the two real prover
-  example certs. Asserted by a TS test (`src/jcs.test.ts`, add vitest like 1.2) and a Rust test
-  (`rust/verifier/tests/hash_vectors.rs`). Generate expected values with the Rust
-  implementation first, then confirm TS agrees.
-- [ ] Document the restriction in `docs/CERTIFICATE_FORMAT.md` (canonicalization section):
-  "v0.1 certificates are restricted to ASCII strings and integers; canonical form is RFC 8785,
-  which both reference implementations satisfy under this restriction."
+- [x] Add npm dep `canonicalize@^3.0.0` to `packages/cert-schema` (latest on the registry at
+  implementation time was 3.0.0, not the originally-guessed 2.0.0 — the `erdtman/canonicalize`
+  package, a well-known RFC 8785 reference implementation); `canonicalizeJSON(obj)` delegates
+  to it (exported signature, and `computeCertificateSHA256`/`verifyCertificateIntegrity`/
+  `parseHexHash` signatures, all unchanged).
+- [x] Add `rust/verifier/src/hash.rs`:
+  `pub fn certificate_sha256(raw_json: &str) -> Result<String, VerifyError>` — parses into
+  `serde_json::Value`, walks it and **rejects any float or non-ASCII string** with a clear error
+  (v0.1 value-domain guard), re-serializes with `serde_json::to_string` (confirmed by reading
+  serde_json 1.0.150's own source: `Value`'s object type is a `BTreeMap` unless the
+  `preserve_order` feature is enabled, which nothing in this workspace's dependency tree turns
+  on — no `indexmap` anywhere in `Cargo.lock` — so re-serialization is key-sorted, minimal
+  separators, byte-identical to JCS under the ASCII+integer restriction), sha256 (the `sha2`
+  dep was already declared and unused), returns `"0x" + 64 lowercase hex`.
+- [x] Wired into the CLI: `verify` and `inspect` both print `SHA256: 0x…`; `VerifyReport` gained
+  `pub sha256: String` (computed once per `verify_with` call from a new `raw_json` field stored
+  on `CertificateVerifier` at load time; a value-domain violation is pushed into `report.errors`
+  rather than aborting, consistent with the accumulate-don't-abort style everywhere else in
+  `verify_with` — an uncanonicalizable certificate has no well-defined identity, so it's invalid).
+- [x] Cross-impl fixture `packages/cert-schema/test-fixtures/hash-vectors.json`:
+  `[{ "file": "<repo-relative cert path>", "sha256": "0x..." }]` for **all three** committed
+  prover example certs. Asserted by a TS test (`src/jcs.test.ts`, using the package's existing
+  `node --test` convention rather than adding vitest — see the 1.2 note on why) and a Rust test
+  (`rust/verifier/tests/hash_vectors.rs`). Expected values generated with the Rust CLI first
+  (`penumbra-verify inspect <cert>`), then confirmed identical from a throwaway Node script
+  calling the TS implementation directly before either test file was written.
+- [x] Documented the restriction in `docs/CERTIFICATE_FORMAT.md` under "Identity & integrity":
+  v0.1's ASCII-string-and-integer-only value domain, why it lets two independent canonicalizers
+  agree without either needing full RFC 8785 number formatting, and which file implements each
+  side.
 
 **Acceptance gate:**
 
 ```powershell
-pnpm --filter @penumbra/cert-schema test   # TS/Rust hash agreement via fixture
-cargo test -p penumbra-verify              # hash_vectors.rs green
+pnpm --filter @penumbra/cert-schema run build && pnpm --filter @penumbra/cert-schema run test   # 6/6 green
+cargo test -p penumbra-verify              # incl. hash_vectors.rs, 15/15 green
 ./target/debug/penumbra-verify.exe verify rust/prover/examples/morphy_mate_in_2.pnbcert
-# → prints SHA256: 0x… (same value the TS test asserts)
+# → prints SHA256: 0xcc2ad24351c66918ddebfb1a8a63c815d1f81c5d9e3a781b53060abe4dd59c48
+#   (same value the TS test asserts from the fixture)
 ```
 
 **If it fails:** byte differences are almost always number formatting or key order — dump both

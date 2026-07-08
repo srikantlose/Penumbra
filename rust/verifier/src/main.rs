@@ -91,6 +91,7 @@ fn verify_certificate(path: &PathBuf, opts: &VerifyOptions) -> Result<bool, Box<
   println!("Certificate Verification Report");
   println!("==============================");
   println!("Valid: {}", report.valid);
+  println!("SHA256: {}", report.sha256);
   println!("Claim: {}", report.claim);
   println!("Nodes: {}", report.node_count);
   println!("Terminals: {}", report.terminal_count);
@@ -123,6 +124,10 @@ fn inspect_certificate(path: &PathBuf) -> Result<bool, Box<dyn std::error::Error
   println!("Zobrist: {}", claim.zobrist);
   println!("Value: {}", claim.value);
   println!("Side: {}", claim.side);
+  match penumbra_verify::certificate_sha256(&content) {
+    Ok(sha256) => println!("SHA256: {}", sha256),
+    Err(e) => println!("SHA256: <unavailable: {}>", e),
+  }
 
   Ok(true)
 }
