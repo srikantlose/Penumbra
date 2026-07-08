@@ -159,7 +159,7 @@ constructed. shakmaty 0.26 is already a declared dep (currently unused). Fix all
 
 **Tasks:**
 
-- [ ] Add `src/semantic.rs` with the replay pass, and extend the public API in `src/verifier.rs`:
+- [x] Add `src/semantic.rs` with the replay pass, and extend the public API in `src/verifier.rs`:
 
   ```rust
   pub struct VerifyOptions {
@@ -177,7 +177,7 @@ constructed. shakmaty 0.26 is already a declared dep (currently unused). Fix all
 
   `VerifyReport` gains `pub semantic: bool` and `pub assumed_probes: usize`.
 
-- [ ] Semantic pass algorithm (runs only after structural checks pass and only if
+- [x] Semantic pass algorithm (runs only after structural checks pass and only if
   `opts.semantic`). All findings append to `report.errors` (same accumulate-don't-abort style
   as the structural pass):
   1. Parse `claim.fen` with shakmaty. Compute its zobrist; must equal `claim.zobrist`
@@ -210,10 +210,10 @@ constructed. shakmaty 0.26 is already a declared dep (currently unused). Fix all
        path (DAG sharing), skip re-verification. Re-encountering a node **on** the current path
        (a cycle) is fine for `at_least_draw` (stop descending — confinement cycle); for `win`
        certs `check_acyclic` already rejected it.
-- [ ] Copy the two real prover certs as semantic golden fixtures (data copy is allowed):
+- [x] Copy the two real prover certs as semantic golden fixtures (data copy is allowed):
   `rust/prover/examples/back_rank_mate_in_1.pnbcert` → `rust/verifier/tests/golden/backrank_mate_in_1.json`,
   `rust/prover/examples/morphy_mate_in_2.pnbcert` → `rust/verifier/tests/golden/morphy_mate_in_2.json`.
-- [ ] Add mutation fixtures (hand-edit copies of the morphy cert; each must fail semantically
+- [x] Add mutation fixtures (hand-edit copies of the morphy cert; each must fail semantically
   with the named error while still passing structural checks):
   - `tests/mutations/illegal_uci.json` — one AND-node reply's `uci` changed to a legal-format
     but illegal move (e.g. `a7a5` where that pawn is pinned/absent).
@@ -222,7 +222,7 @@ constructed. shakmaty 0.26 is already a declared dep (currently unused). Fix all
   - `tests/mutations/wrong_node_zobrist.json` — corrupt one node's zobrist hex.
   - `tests/mutations/fake_checkmate_terminal.json` — a terminal claiming checkmate on a
     non-mate position.
-- [ ] Update `tests/verify_certificates.rs`:
+- [x] Update `tests/verify_certificates.rs`:
   - Rename `golden_kqpk_verifies_clean` → `golden_kqpk_passes_structural_checks`; call
     `verify_with(&VerifyOptions { semantic: false, ..Default::default() })`; keep the exact
     assertions (valid, 9 nodes, 7 terminals, `"win white"`).
@@ -232,16 +232,18 @@ constructed. shakmaty 0.26 is already a declared dep (currently unused). Fix all
   - Add semantic golden tests for the two real certs (valid under default `verify()`).
   - Add one mutation test per new fixture, asserting invalid + error-message substring.
   - Keep the existing two mutation tests and the format-version test as-is.
-- [ ] CLI (`src/main.rs`): add `--structural-only` and `--assume-tb` flags to `verify`; print
+- [x] CLI (`src/main.rs`): add `--structural-only` and `--assume-tb` flags to `verify`; print
   which mode ran and `assumed_probes` when nonzero. `--syzygy`/`--tb-endpoint`/`--offline`
   remain parsed-but-inert until Stage 2 (leave the TODO comment pointing at Stage 2).
-- [ ] Delete the dead `pub const FORMAT_VERSION: &str = "0.1.0"` from `src/lib.rs` (wrong value,
+- [x] Delete the dead `pub const FORMAT_VERSION: &str = "0.1.0"` from `src/lib.rs` (wrong value,
   never read) — or fix to `"0.1"` and use it in `load_from_json`'s check. Pick the second.
-- [ ] Add `dtm: Option<i32>` (serde `skip_serializing_if = "Option::is_none"`, `default`) to
+  (Fixed to `"0.1"` and wired into the format-version check.)
+- [x] Add `dtm: Option<i32>` (serde `skip_serializing_if = "Option::is_none"`, `default`) to
   `CertificateTerminal` — the spec and `schema.json` already define it; the struct just lags.
-- [ ] Fix the 10 pre-existing clippy warnings in the verifier (`map_or` → `is_some_and`,
+- [x] Fix the 10 pre-existing clippy warnings in the verifier (`map_or` → `is_some_and`,
   `nth(0)` → `next()`, manual range → `RangeInclusive::contains`) — this stream owns that
-  cleanup now.
+  cleanup now. (Also fixed a redundant-closure warning and kept the new semantic-pass code
+  itself clippy-clean via a `SemanticCtx` bundling struct instead of long argument lists.)
 
 **The prover's 6 round-trip tests must stay green unchanged** — they call default `verify()`
 on real certs and are the strongest regression gate for this work.

@@ -1,0 +1,194 @@
+{
+  "format_version": "0.1",
+  "claim": {
+    "fen": "kbK5/pp6/1P6/8/8/8/8/R7 w - - 0 1",
+    "zobrist": "0x5e839b6d09b2d45c",
+    "value": "win",
+    "side": "white"
+  },
+  "rules": "standard",
+  "root_id": "root",
+  "nodes": [
+    {
+      "id": "n3",
+      "zobrist": "0xccf1091d8bce548e",
+      "to_move": "black",
+      "kind": "terminal",
+      "terminal": {
+        "type": "checkmate",
+        "value": "win"
+      }
+    },
+    {
+      "id": "n2",
+      "zobrist": "0x6a1ba4f9c5bf32fc",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "b6b7",
+          "child_id": "n3"
+        }
+      ]
+    },
+    {
+      "id": "n5",
+      "zobrist": "0x13b03004b15f7332",
+      "to_move": "black",
+      "kind": "terminal",
+      "terminal": {
+        "type": "checkmate",
+        "value": "win"
+      }
+    },
+    {
+      "id": "n4",
+      "zobrist": "0x56a99a15060fa090",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "a6a7",
+          "child_id": "n5"
+        }
+      ]
+    },
+    {
+      "id": "n7",
+      "zobrist": "0x9f38f65f7220bf57",
+      "to_move": "black",
+      "kind": "terminal",
+      "terminal": {
+        "type": "checkmate",
+        "value": "win"
+      }
+    },
+    {
+      "id": "n6",
+      "zobrist": "0xda215c4ec5706cf5",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "a6a7",
+          "child_id": "n7"
+        }
+      ]
+    },
+    {
+      "id": "n9",
+      "zobrist": "0x99bfc84fe1d4b2ce",
+      "to_move": "black",
+      "kind": "terminal",
+      "terminal": {
+        "type": "checkmate",
+        "value": "win"
+      }
+    },
+    {
+      "id": "n8",
+      "zobrist": "0xdca6625e5684616c",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "a6a7",
+          "child_id": "n9"
+        }
+      ]
+    },
+    {
+      "id": "n11",
+      "zobrist": "0x150a3eea73000208",
+      "to_move": "black",
+      "kind": "terminal",
+      "terminal": {
+        "type": "checkmate",
+        "value": "win"
+      }
+    },
+    {
+      "id": "n10",
+      "zobrist": "0x501394fbc450d1aa",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "a6a7",
+          "child_id": "n11"
+        }
+      ]
+    },
+    {
+      "id": "n13",
+      "zobrist": "0xfc5e4045ca899ef8",
+      "to_move": "black",
+      "kind": "terminal",
+      "terminal": {
+        "type": "checkmate",
+        "value": "win"
+      }
+    },
+    {
+      "id": "n12",
+      "zobrist": "0xb947ea547dd94d5a",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "a6a7",
+          "child_id": "n13"
+        }
+      ]
+    },
+    {
+      "id": "n1",
+      "zobrist": "0x22b9c76bef13c30f",
+      "to_move": "black",
+      "kind": "and-node",
+      "moves": [
+        {
+          "uci": "b7a6",
+          "child_id": "n2"
+        },
+        {
+          "uci": "b8h2",
+          "child_id": "n4"
+        },
+        {
+          "uci": "b8g3",
+          "child_id": "n6"
+        },
+        {
+          "uci": "b8f4",
+          "child_id": "n8"
+        },
+        {
+          "uci": "b8e5",
+          "child_id": "n10"
+        },
+        {
+          "uci": "b8d6",
+          "child_id": "n12"
+        }
+      ]
+    },
+    {
+      "id": "root",
+      "zobrist": "0x5e839b6d09b2d45c",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "a1a6",
+          "child_id": "n1"
+        }
+      ]
+    }
+  ],
+  "dependencies": {},
+  "metadata": {
+    "producer": "penumbra-prover 0.1",
+    "timestamp": "2026-07-08T01:40:25Z"
+  }
+}

@@ -36,6 +36,8 @@ pub struct CertificateTerminal {
   pub terminal_type: String,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub value: Option<String>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub dtm: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,27 +65,64 @@ pub struct CertificateDependencies {
   pub tablebase: Option<String>,
 }
 
+/// How the verifier should treat `tablebase` terminals.
+///
+/// `Forbid` (the default) is the sound choice: a certificate that leans on a
+/// tablebase claim without a configured source is rejected rather than
+/// trusted. `Assume` exists for inspecting/debugging certs before a real
+/// tablebase is wired up (Stage 2 adds a `Syzygy(PathBuf)` variant that
+/// actually probes).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TablebasePolicy {
+  #[default]
+  Forbid,
+  Assume,
+}
+
+#[derive(Debug, Clone)]
+pub struct VerifyOptions {
+  /// Replay moves against the claimed FEN and check legality, AND-node
+  /// coverage, and terminal truthfulness. Default on; the sound mode.
+  pub semantic: bool,
+  pub tb: TablebasePolicy,
+}
+
+impl Default for VerifyOptions {
+  fn default() -> Self {
+    VerifyOptions {
+      semantic: true,
+      tb: TablebasePolicy::Forbid,
+    }
+  }
+}
+
 pub struct VerifyReport {
   pub valid: bool,
   pub claim: String,
   pub node_count: usize,
   pub terminal_count: usize,
   pub probe_count: usize,
+  /// Tablebase terminals accepted on faith under `TablebasePolicy::Assume`
+  /// rather than actually probed. Nonzero means the report's validity is
+  /// conditional on those claims being true.
+  pub assumed_probes: usize,
+  /// Whether the semantic (move-replay) pass ran.
+  pub semantic: bool,
   pub elapsed_ms: u128,
   pub errors: Vec<String>,
 }
 
 pub struct CertificateVerifier {
-  certificate: Certificate,
-  nodes_by_id: HashMap<String, CertificateNode>,
+  pub(crate) certificate: Certificate,
+  pub(crate) nodes_by_id: HashMap<String, CertificateNode>,
 }
 
 impl CertificateVerifier {
   pub fn load_from_json(json: &str) -> Result<Self, VerifyError> {
     let certificate: Certificate =
-      serde_json::from_str(json).map_err(|e| VerifyError::Json(e))?;
+      serde_json::from_str(json).map_err(VerifyError::Json)?;
 
-    if certificate.format_version != "0.1" {
+    if certificate.format_version != crate::FORMAT_VERSION {
       return Err(VerifyError::UnsupportedFormatVersion(
         certificate.format_version,
       ));
@@ -100,7 +139,15 @@ impl CertificateVerifier {
     })
   }
 
+  /// Verify with the default options: semantic replay on, tablebase
+  /// terminals forbidden unless a source is configured. This is the sound
+  /// default — use `verify_with` to opt into structural-only or
+  /// assumed-tablebase modes.
   pub fn verify(&self) -> Result<VerifyReport, VerifyError> {
+    self.verify_with(&VerifyOptions::default())
+  }
+
+  pub fn verify_with(&self, opts: &VerifyOptions) -> Result<VerifyReport, VerifyError> {
     let start = std::time::Instant::now();
 
     let _root_node = self
@@ -119,6 +166,8 @@ impl CertificateVerifier {
       node_count: self.certificate.nodes.len(),
       terminal_count: 0,
       probe_count: 0,
+      assumed_probes: 0,
+      semantic: opts.semantic,
       elapsed_ms: 0,
       errors: vec![],
     };
@@ -178,6 +227,13 @@ impl CertificateVerifier {
       }
     }
 
+    // The semantic (move-replay) pass only runs once every structural
+    // invariant above holds — a certificate with a dangling child_id or a
+    // malformed FEN has nothing meaningful to replay.
+    if opts.semantic && report.errors.is_empty() {
+      self.verify_semantic(opts, &mut report);
+    }
+
     report.valid = report.errors.is_empty() && report.terminal_count > 0;
     report.elapsed_ms = start.elapsed().as_millis();
 
@@ -231,9 +287,10 @@ fn is_valid_zobrist(zobrist: &str) -> bool {
 }
 
 fn is_valid_uci(uci: &str) -> bool {
-  uci.len() >= 4 && uci.len() <= 5
-    && uci.chars().nth(0).map_or(false, |c| c >= 'a' && c <= 'h')
-    && uci.chars().nth(1).map_or(false, |c| c >= '1' && c <= '8')
-    && uci.chars().nth(2).map_or(false, |c| c >= 'a' && c <= 'h')
-    && uci.chars().nth(3).map_or(false, |c| c >= '1' && c <= '8')
+  let chars: Vec<char> = uci.chars().collect();
+  chars.len() >= 4 && chars.len() <= 5
+    && ('a'..='h').contains(&chars[0])
+    && ('1'..='8').contains(&chars[1])
+    && ('a'..='h').contains(&chars[2])
+    && ('1'..='8').contains(&chars[3])
 }

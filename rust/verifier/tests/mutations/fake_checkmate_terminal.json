@@ -1,0 +1,40 @@
+{
+  "format_version": "0.1",
+  "claim": {
+    "fen": "kbK5/pp6/1P6/8/8/8/8/R7 w - - 0 1",
+    "zobrist": "0x5e839b6d09b2d45c",
+    "value": "win",
+    "side": "white"
+  },
+  "rules": "standard",
+  "root_id": "root",
+  "nodes": [
+    {
+      "id": "n1",
+      "zobrist": "0x22b9c76bef13c30f",
+      "to_move": "black",
+      "kind": "terminal",
+      "terminal": {
+        "type": "checkmate",
+        "value": "win"
+      }
+    },
+    {
+      "id": "root",
+      "zobrist": "0x5e839b6d09b2d45c",
+      "to_move": "white",
+      "kind": "or-node",
+      "moves": [
+        {
+          "uci": "a1a6",
+          "child_id": "n1"
+        }
+      ]
+    }
+  ],
+  "dependencies": {},
+  "metadata": {
+    "producer": "penumbra-prover 0.1",
+    "timestamp": "2026-07-08T01:40:25Z"
+  }
+}

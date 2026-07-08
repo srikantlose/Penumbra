@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use penumbra_verify::CertificateVerifier;
+use penumbra_verify::{CertificateVerifier, TablebasePolicy, VerifyOptions};
 use std::fs;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -18,14 +18,20 @@ enum Commands {
     #[arg(help = "Path to certificate file (.pnbcert)")]
     cert_path: PathBuf,
 
-    #[arg(long, help = "Path to Syzygy tablebase directory (offline mode)")]
+    #[arg(long, help = "Path to Syzygy tablebase directory (wired up in the fortress track, Stage 2)")]
     syzygy: Option<PathBuf>,
 
-    #[arg(long, help = "Tablebase endpoint URL")]
+    #[arg(long, help = "Tablebase endpoint URL (not implemented yet; use --syzygy)")]
     tb_endpoint: Option<String>,
 
-    #[arg(long, default_value_t = false, help = "Run in offline mode")]
+    #[arg(long, default_value_t = false, help = "Run in offline mode (equivalent to omitting --syzygy)")]
     offline: bool,
+
+    #[arg(long, default_value_t = false, help = "Skip move replay; only check certificate shape")]
+    structural_only: bool,
+
+    #[arg(long, default_value_t = false, help = "Accept tablebase terminals on faith instead of probing (unsound; for inspection only)")]
+    assume_tb: bool,
   },
   Inspect {
     #[arg(help = "Path to certificate file (.pnbcert)")]
@@ -40,9 +46,24 @@ fn main() -> ExitCode {
     Commands::Verify {
       cert_path,
       syzygy: _,
-      tb_endpoint: _,
+      tb_endpoint,
       offline: _,
-    } => verify_certificate(&cert_path),
+      structural_only,
+      assume_tb,
+    } => {
+      if tb_endpoint.is_some() {
+        eprintln!("--tb-endpoint is not implemented yet; use --syzygy (Stage 2) instead");
+      }
+      let opts = VerifyOptions {
+        semantic: !structural_only,
+        tb: if assume_tb {
+          TablebasePolicy::Assume
+        } else {
+          TablebasePolicy::Forbid
+        },
+      };
+      verify_certificate(&cert_path, &opts)
+    }
     Commands::Inspect { cert_path } => inspect_certificate(&cert_path),
   };
 
@@ -61,11 +82,11 @@ fn main() -> ExitCode {
   }
 }
 
-fn verify_certificate(path: &PathBuf) -> Result<bool, Box<dyn std::error::Error>> {
+fn verify_certificate(path: &PathBuf, opts: &VerifyOptions) -> Result<bool, Box<dyn std::error::Error>> {
   let content = fs::read_to_string(path)?;
 
   let verifier = CertificateVerifier::load_from_json(&content)?;
-  let report = verifier.verify()?;
+  let report = verifier.verify_with(opts)?;
 
   println!("Certificate Verification Report");
   println!("==============================");
@@ -73,7 +94,11 @@ fn verify_certificate(path: &PathBuf) -> Result<bool, Box<dyn std::error::Error>
   println!("Claim: {}", report.claim);
   println!("Nodes: {}", report.node_count);
   println!("Terminals: {}", report.terminal_count);
+  println!("Mode: {}", if report.semantic { "semantic" } else { "structural-only" });
   println!("Probes: {}", report.probe_count);
+  if report.assumed_probes > 0 {
+    println!("Assumed (unverified) tablebase terminals: {}", report.assumed_probes);
+  }
   println!("Elapsed: {}ms", report.elapsed_ms);
 
   if !report.errors.is_empty() {
