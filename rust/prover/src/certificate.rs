@@ -51,6 +51,11 @@ pub struct Terminal {
   pub terminal_type: String,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub value: Option<String>,
+  /// Distance-to-mate. Never populated by this prover: Syzygy tables give
+  /// DTZ (distance to zeroing), not DTM, and the two are not the same
+  /// number -- emitting one as the other would be a silent unsoundness.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub dtm: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]

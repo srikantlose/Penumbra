@@ -4,7 +4,7 @@
 //! success, writes a v0.1 `.pnbcert` certificate that `penumbra-verify` accepts.
 
 use clap::{Parser, Subcommand};
-use penumbra_prover::{ProofNumberSearch, ProofSearchConfig};
+use penumbra_prover::{ClaimValue, ProofNumberSearch, ProofSearchConfig};
 use shakmaty::Color;
 use std::fs;
 use std::path::PathBuf;
@@ -36,6 +36,20 @@ enum Commands {
 
     #[arg(long, default_value_t = 30_000, help = "Time budget in milliseconds")]
     time_ms: u64,
+
+    #[arg(
+      long,
+      value_parser = ["win", "at_least_draw"],
+      default_value = "win",
+      help = "What to prove"
+    )]
+    claim: String,
+
+    #[arg(
+      long,
+      help = "Path to a Syzygy tablebase directory (enables tablebase leaves)"
+    )]
+    syzygy: Option<PathBuf>,
   },
 }
 
@@ -49,7 +63,17 @@ fn main() -> ExitCode {
       out,
       max_nodes,
       time_ms,
-    } => run_prove(&fen, side.as_deref(), out.as_ref(), max_nodes, time_ms),
+      claim,
+      syzygy,
+    } => run_prove(
+      &fen,
+      side.as_deref(),
+      out.as_ref(),
+      max_nodes,
+      time_ms,
+      &claim,
+      syzygy,
+    ),
   }
 }
 
@@ -59,6 +83,8 @@ fn run_prove(
   out: Option<&PathBuf>,
   max_nodes: usize,
   time_ms: u64,
+  claim: &str,
+  syzygy: Option<PathBuf>,
 ) -> ExitCode {
   let claim_side = match side {
     Some("white") => Some(Color::White),
@@ -70,10 +96,20 @@ fn run_prove(
     None => None,
   };
 
+  let claim_value = match claim {
+    "win" => ClaimValue::Win,
+    "at_least_draw" => ClaimValue::AtLeastDraw,
+    other => {
+      eprintln!("Error: unknown claim '{other}' (expected win or at_least_draw)");
+      return ExitCode::FAILURE;
+    }
+  };
+
   let config = ProofSearchConfig {
     max_nodes,
     time_limit_ms: time_ms,
-    tablebase_path: None,
+    tablebase_path: syzygy.map(|p| p.display().to_string()),
+    claim: claim_value,
   };
 
   let search = ProofNumberSearch::new(config);
