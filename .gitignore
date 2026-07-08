@@ -34,3 +34,6 @@ tools/
 # Session-scoped agent state (machine-local, regenerated freely)
 .stitch-project.json
 HANDOFF.md
+
+# Syzygy tablebases (~1 GB, fetched on demand via scripts/fetch-syzygy.mjs)
+tablebases/

@@ -633,15 +633,17 @@ meaningful).
 
 ### 2.1 Syzygy acquisition
 
-- [ ] `scripts/fetch-syzygy.mjs`: download all 3-4-5-man WDL (`.rtbw`) + DTZ (`.rtbz`) files
-  (~1 GB total, 145 files each) from `https://tablebase.lichess.ovh/tables/standard/3-4-5/`
-  (fallback mirror `https://tablebase.sesse.net/syzygy/3-4-5/`) into `tablebases/syzygy/3-4-5/`.
+- [x] `scripts/fetch-syzygy.mjs`: download all 3-4-5-man WDL (`.rtbw`) + DTZ (`.rtbz`) files
+  (~1 GB total, 145 files each) from `https://tablebase.lichess.ovh/tables/standard/3-4-5-wdl/`
+  and `.../3-4-5-dtz/` (see decision log — corrected from this doc's original single-dir URL;
+  fallback mirror `https://tablebase.sesse.net/syzygy/3-4-5/`) into `tablebases/syzygy/3-4-5/`.
   Idempotent (skip files that exist with the right size); writes
   `tablebases/manifest.json` (file list + sizes + fetch date); prints a summary count.
-- [ ] Add `tablebases/` to `.gitignore`.
+- [x] Add `tablebases/` to `.gitignore`.
 
 **Acceptance:** `node scripts/fetch-syzygy.mjs` twice — second run downloads nothing; directory
-holds 290 files ≈ 1 GB.
+holds 290 files ≈ 1 GB. **Done** 2026-07-08: 290 files, 984 MB, second run reports
+`0 downloaded, 290 already present`.
 
 ### 2.2 Prover: claim modes, TB leaf oracle, transpositions (`rust/prover`)
 
@@ -1212,6 +1214,13 @@ methodology finalization. **Every task here has an ask-the-user checkpoint** (§
   divergence only in pinned-ep corners; shakmaty is the committed reference.
 - **2026-07-08 — Quick tier fingerprinting:** quick-ladder evals carry their own fingerprint;
   canonical and quick rows never mix under one fingerprint.
+- **2026-07-08 — Syzygy source URLs corrected:** the actual lichess layout splits WDL/DTZ into
+  `tables/standard/3-4-5-wdl/` and `tables/standard/3-4-5-dtz/` (not the single `3-4-5/` this
+  roadmap originally named); both confirmed to hold exactly 145 files each (984 MB total), matching
+  the estimate. `scripts/fetch-syzygy.mjs` lists both index pages directly instead of hardcoding
+  the 290 filenames, so it stays correct if the host's set ever changes. The `sesse.net` mirror
+  is currently serving a mismatched TLS cert for an unrelated host (fails from both curl/schannel
+  and Node) — kept as a best-effort per-file fallback in the script, but don't rely on it.
 - **2026-07-08 — Syzygy value mapping:** CursedWin/BlessedLoss are draws under standard rules;
   `win` claims require strict `Wdl::Win` + DTZ-vs-halfmove-clock check; `at_least_draw` accepts
   Win/CursedWin/Draw and BlessedLoss only with `|dtz| + hmc ≥ 100`.

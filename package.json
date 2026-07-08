@@ -27,7 +27,8 @@
     "db:push": "drizzle-kit push",
     "db:drop": "drizzle-kit drop",
     "db:studio": "drizzle-kit studio",
-    "db:smoke": "node scripts/db-smoke.mjs"
+    "db:smoke": "node scripts/db-smoke.mjs",
+    "fetch:syzygy": "node scripts/fetch-syzygy.mjs"
   },
   "dependencies": {
     "drizzle-orm": "^0.33.0"
