@@ -8,3 +8,10 @@ allowBuilds:
   esbuild: true
 
 shared-workspace-lockfile: true
+
+# bullmq pins an exact ioredis version; without this override pnpm installs
+# a second, structurally-incompatible ioredis copy for @penumbra/analysis's
+# own dependency, which TypeScript then rejects when an IORedis instance is
+# passed into a bullmq Queue/Worker's `connection` option.
+overrides:
+  ioredis: 5.10.1

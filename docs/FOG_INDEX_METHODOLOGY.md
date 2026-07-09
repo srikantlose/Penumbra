@@ -23,10 +23,16 @@ The **Fog Index** is a 0–100 metric quantifying the "unsolvedness" of a chess 
 - **Time:** ~60–90 seconds per position at 64M nodes
 
 ### Lc0
-- **Pin:** Exact release + network weights (e.g., Lc0 0.31.0 + 42069 network)
-- **Options:** `MultiPV=4`, GPU backend
-- **Search:** Fixed **30k nodes** (policy+value net has no iterative deepening concept; node count is the throttle)
-- **Time:** ~2–4 seconds per position
+- **Pin:** Exact release + network weights — see `docs/ENGINES.md` for the current pin table
+- **Options:** `MultiPV=4`, CPU (OpenBLAS) backend — the GPU (CUDA) backend was tested and
+  found non-deterministic across repeated runs at fixed node counts; see `docs/ENGINES.md`
+  for the determinism findings behind this choice
+- **Search:** Fixed **2k nodes** (policy+value net has no iterative deepening concept; node count
+  is the throttle). Originally spec'd as 30k nodes — reduced after measuring that CPU inference
+  cost is dominated by per-node backend overhead (~15ms/node, largely independent of network
+  size), making 30k nodes cost 5-8 minutes per search. 2k nodes is a deliberate tradeoff between
+  search depth and practical pipeline throughput; see `docs/ENGINES.md` for the full timing data.
+- **Time:** ~30 seconds per position on CPU
 
 ### Engine fingerprint
 Hash all canonical settings (engine binary, net id, nodes, MultiPV, UCI options) into a **SHA256 fingerprint**. Every stored eval carries it. This allows:
