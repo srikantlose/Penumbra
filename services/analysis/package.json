@@ -1,0 +1,37 @@
+{
+  "name": "@penumbra/analysis",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "UCI engine orchestration worker: canonical Stockfish + Lc0 evals feeding the Fog Index formula",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist",
+    "analyze": "node dist/cli.js",
+    "worker": "node dist/queue/worker.js",
+    "repro-test": "node dist/scripts/repro-test.js",
+    "repro-test:canonical": "node dist/scripts/repro-test.js --tier canonical"
+  },
+  "dependencies": {
+    "@penumbra/cert-schema": "workspace:*",
+    "@penumbra/core": "workspace:*",
+    "@penumbra/db": "workspace:*",
+    "@penumbra/fog": "workspace:*",
+    "bullmq": "^5.0.0",
+    "chessops": "^0.15.0",
+    "drizzle-orm": "^0.33.0",
+    "ioredis": "^5.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@penumbra/config": "workspace:*",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  }
+}

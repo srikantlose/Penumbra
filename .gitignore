@@ -39,4 +39,5 @@ HANDOFF.md
 tablebases/
 
 # Engine binaries + networks (~1 GB, fetched on demand via scripts/fetch-engines.mjs)
-engines/
+# Root-anchored: services/analysis/src/engines/ is real source, not this.
+/engines/
