@@ -32,7 +32,7 @@ export interface FogComputeOptions {
   moveMultiPV?: number;
 }
 
-function winProbability(wins: number, draws: number, losses: number): number {
+export function winProbability(wins: number, draws: number, losses: number): number {
   const total = wins + draws + losses;
   if (total === 0) return 0.5;
   return (wins + 0.5 * draws) / total;

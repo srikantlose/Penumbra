@@ -4,7 +4,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { Client } from 'pg';
 import * as schema from './schema.js';
 
-export type Database = ReturnType<typeof getDatabase>;
+export type Database = Awaited<ReturnType<typeof getDatabase>>;
 
 export async function getDatabase(databaseUrl: string) {
   const client = new Client({ connectionString: databaseUrl });

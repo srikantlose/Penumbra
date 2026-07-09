@@ -2,6 +2,7 @@ export {
   computeFogComponents,
   computeFogScore,
   computeFogIndex,
+  winProbability,
   FOG_FORMULA_VERSION,
   type EngineEvals,
   type FogComponents,
