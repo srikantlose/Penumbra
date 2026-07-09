@@ -9,8 +9,11 @@ import { computeFingerprintForTier } from '../fingerprint.js';
 // canonical's 64M-node Stockfish rung is CPU-saturating and Lc0 shares one
 // GPU, so canonical worker concurrency stays at 1; quick's ladder tops out
 // at 1.6M nodes and can safely run 2 at once. See docs/ROADMAP.md Stage 3.
+// Not "analyze-position:${tier}" -- this installed BullMQ version rejects
+// colons in queue names outright ("Queue name cannot contain :"), a check
+// that predates this codebase's own queue-naming choice.
 export function queueNameForTier(tier: Tier): string {
-  return `analyze-position:${tier}`;
+  return `analyze-position-${tier}`;
 }
 
 export interface AnalyzePositionJobData {
@@ -46,13 +49,17 @@ export function createAnalyzePositionQueue(
 }
 
 /**
- * epd + ':' + fingerprint -- re-enqueuing the same position at the same
+ * epd + '__' + fingerprint -- re-enqueuing the same position at the same
  * tier lands on the same BullMQ jobId, so it's a dedupe no-op rather than a
  * duplicate job. Computable up front since the fingerprint depends only on
- * pinned settings, not on any actual engine output.
+ * pinned settings, not on any actual engine output. Not a ':' separator --
+ * this installed BullMQ version reserves colon-delimited job IDs for its own
+ * repeatable-job format ("Custom Id cannot contain :" unless split(':')
+ * yields exactly 3 parts), a check that predates this codebase's own
+ * jobId format.
  */
 export function analyzePositionJobId(fen: string, tier: Tier): string {
-  return `${normalizeEPD(fen)}:${computeFingerprintForTier(tier)}`;
+  return `${normalizeEPD(fen)}__${computeFingerprintForTier(tier)}`;
 }
 
 export async function enqueueAnalyzePosition(

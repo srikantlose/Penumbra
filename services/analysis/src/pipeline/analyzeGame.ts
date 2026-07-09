@@ -1,6 +1,8 @@
 import { asc, eq } from 'drizzle-orm';
 import { QueueEvents } from 'bullmq';
-import { normalizeEPD, type TruthStatus } from '@penumbra/core';
+import { parseFen } from 'chessops/fen';
+import { Chess } from 'chessops/chess';
+import { normalizeEPD, TruthStatus } from '@penumbra/core';
 import { schema, isPositionProven, type Database } from '@penumbra/db';
 import type { Tier as EngineTier } from '../engines/config.js';
 import { computeFingerprintForTier } from '../fingerprint.js';
@@ -30,10 +32,24 @@ function engineTierFor(tier: AnalysisTier): EngineTier {
 // Stage 4.
 const DEEP_TIER_PRIORITY = 10;
 
-// Generous per-position wait: canonical-tier searches run ~30s/position on
-// this hardware (see docs/ENGINES.md), and jobs can also queue behind other
-// work at concurrency 1.
-const JOB_WAIT_TTL_MS = 10 * 60 * 1000;
+// Per-job wait budgets, multiplied by the game's own position count below.
+// waitUntilFinished's ttl counts from the moment it's called (right after
+// enqueueing), not from when the worker picks the job up -- so for a game
+// with many positions, a job near the back of the queue can legitimately
+// still be *waiting* its turn when a flat per-job ttl would already have
+// expired. A 49-ply game at quick tier (concurrency 2, ~50s/position
+// observed) needs ~20 minutes of real wall time; a flat 10-minute ttl timed
+// out on positions still queued behind their peers, not on anything actually
+// stuck. Budgeting per position (ignoring concurrency, so this only ever
+// over-estimates) fixes that without coupling this module to worker.ts's
+// concurrency settings.
+const QUICK_PER_POSITION_BUDGET_MS = 90 * 1000;
+const CANONICAL_PER_POSITION_BUDGET_MS = 10 * 60 * 1000;
+
+function jobWaitTtlMs(engineTier: EngineTier, positionCount: number): number {
+  const perPosition = engineTier === 'canonical' ? CANONICAL_PER_POSITION_BUDGET_MS : QUICK_PER_POSITION_BUDGET_MS;
+  return positionCount * perPosition;
+}
 
 export interface AnalyzeGameInput {
   gameId: number;
@@ -69,6 +85,20 @@ export async function analyzeGame(db: Database, input: AnalyzeGameInput): Promis
   const analysisId = await createAnalysisRow(db, input.gameId, input.tier);
   const positions = await loadGamePositions(db, input.gameId);
 
+  // A position with zero legal moves is checkmate or stalemate. Chess rules
+  // forbid any move after that, so it can only ever be the game's last
+  // recorded position -- and an engine has nothing to search there (Stockfish
+  // emits no info/wdl lines, which is what runStockfishLadder's "no wdl
+  // reported" error is guarding against). The outcome is already fully
+  // determined by the rules rather than by search, so this position is
+  // excluded from engine analysis and given a certain, zero-fog entry
+  // directly. detectProofEntryPly/detectMissedProofs still see the full
+  // `positions` list -- they already handle the last position correctly on
+  // their own terms.
+  const lastPosition = positions[positions.length - 1];
+  const terminal = lastPosition && !hasLegalMoves(lastPosition.epd) ? lastPosition : null;
+  const enginePositions = terminal ? positions.slice(0, -1) : positions;
+
   const queueConnection = createRedisConnection();
   const eventsConnection = createRedisConnection();
   const queue = createAnalyzePositionQueue(engineTier, queueConnection);
@@ -77,20 +107,28 @@ export async function analyzeGame(db: Database, input: AnalyzeGameInput): Promis
   try {
     await queueEvents.waitUntilReady();
 
+    // Each in-flight job.waitUntilFinished() below adds a 'closing' listener
+    // to this queue for the duration of its wait, so a full game's worth of
+    // concurrent waits routinely exceeds EventEmitter's default limit of 10 --
+    // harmless (BullMQ removes each listener as its job settles), but the
+    // resulting MaxListenersExceededWarning is noise worth silencing.
+    queue.setMaxListeners(enginePositions.length + 10);
+
     const priority = input.tier === 'deep' ? DEEP_TIER_PRIORITY : undefined;
     const jobIds = await Promise.all(
-      positions.map((position) => enqueueAnalyzePosition(queue, epdToFen(position.epd), engineTier, { priority }))
+      enginePositions.map((position) => enqueueAnalyzePosition(queue, epdToFen(position.epd), engineTier, { priority }))
     );
 
+    const ttl = jobWaitTtlMs(engineTier, enginePositions.length);
     const results = await Promise.all(
       jobIds.map(async (jobId) => {
         const job = await queue.getJob(jobId);
         if (!job) throw new Error(`analyze-position job "${jobId}" vanished before completion`);
-        return job.waitUntilFinished(queueEvents, JOB_WAIT_TTL_MS);
+        return job.waitUntilFinished(queueEvents, ttl);
       })
     );
 
-    const fogTimeline: FogTimelineEntry[] = positions.map((position, i) => ({
+    const fogTimeline: FogTimelineEntry[] = enginePositions.map((position, i) => ({
       ply: position.ply,
       positionId: position.positionId,
       san: position.san,
@@ -99,6 +137,18 @@ export async function analyzeGame(db: Database, input: AnalyzeGameInput): Promis
       status: results[i].status,
       fingerprint: results[i].engineFingerprint,
     }));
+
+    if (terminal) {
+      fogTimeline.push({
+        ply: terminal.ply,
+        positionId: terminal.positionId,
+        san: terminal.san,
+        fog: 0,
+        percentile: null,
+        status: TruthStatus.PROVEN,
+        fingerprint: computeFingerprintForTier(engineTier),
+      });
+    }
 
     const epdByPositionId = new Map(positions.map((position) => [position.positionId, position.epd]));
 
@@ -171,6 +221,17 @@ async function loadGamePositions(db: Database, gameId: number): Promise<Analyzed
 // position, not real historical counters.
 function epdToFen(epd: string): string {
   return `${epd} 0 1`;
+}
+
+// Defensive on parse/setup failure: treat as "has legal moves" so an
+// unparseable epd falls through to the normal engine path (and whatever
+// error that path already raises) rather than being silently skipped here.
+function hasLegalMoves(epd: string): boolean {
+  const parsed = parseFen(epdToFen(epd));
+  if (parsed.isErr) return true;
+  const posResult = Chess.fromSetup(parsed.value);
+  if (posResult.isErr) return true;
+  return posResult.value.hasDests();
 }
 
 async function isProvenWinForMover(db: Database, fen: string, mover: 'white' | 'black'): Promise<boolean> {
