@@ -941,26 +941,26 @@ keyed, fog timeline computed per game, proof-entry detected, truth labeled.
 
 **Tasks:**
 
-- [ ] **`src/import/lichess.ts`** — public export API (no OAuth for public games):
+- [x] **`src/import/lichess.ts`** — public export API (no OAuth for public games):
   `GET https://lichess.org/api/games/user/{username}?max={n}&moves=true&pgnInJson=true` with
   header `Accept: application/x-ndjson`; stream-parse NDJSON lines → `{id, players, winner,
   pgn, variant, speed, createdAt}`. **Skip non-standard variants** (`variant !== 'standard'` —
   rules:"standard" invariant). Single concurrent request, and throttle politely (Lichess
   etiquette: one stream at a time, no hammering). Single game:
   `GET https://lichess.org/game/export/{id}?pgnInJson=true`.
-- [ ] **`src/import/pgn.ts`** — chessops-based extraction (chessops 0.15 API, verified:
+- [x] **`src/import/pgn.ts`** — chessops-based extraction (chessops 0.15 API, verified:
   `parsePgn` from `chessops/pgn`, `startingPosition(game.headers)`, `game.moves.mainline()`,
   `parseSan` from `chessops/san`, `makeUci` from `chessops/util`):
   `extractPositions(pgn: string) → { ply, fen, epd, zobristHex, pieceCount, uci, san }[]`
   — entry per position **after** each ply, plus ply-0 startpos entry. Convention (document in
   the module docstring, reuse everywhere): **ply 0 = the position before White's first move;
   entry N holds the position after ply N and the move that produced it.**
-- [ ] **`src/import/persist.ts`** —
+- [x] **`src/import/persist.ts`** —
   `upsertGame` (unique on (source, source_game_id) — `ON CONFLICT DO NOTHING` + select),
   `upsertPositions`: `INSERT … ON CONFLICT (epd) DO UPDATE SET occurrence_count =
   positions.occurrence_count + 1` (positions is a counter table, not append-only);
   `first_seen_game_id` set only on first insert; bulk-insert `game_positions` rows.
-- [ ] **`src/pipeline/analyzeGame.ts`** — create `analyses` row (`tier`, `status: 'queued'`);
+- [x] **`src/pipeline/analyzeGame.ts`** — create `analyses` row (`tier`, `status: 'queued'`);
   enqueue per-position jobs (quick tier default; deep = canonical enqueued with low priority);
   when all positions of a game are scored, assemble the **fog timeline** and update the row
   (`status: 'done'`, `completed_at`):
@@ -970,20 +970,20 @@ keyed, fog timeline computed per game, proof-entry detected, truth labeled.
      "status": "EVALUATED", "fingerprint": "0x…" }, …]
   ```
 
-- [ ] **Truth labeling helper** (put in `packages/db/src/truth.ts`, exported — web/API/worker
+- [x] **Truth labeling helper** (put in `packages/db/src/truth.ts`, exported — web/API/worker
   must not disagree): `deriveTruthStatus({ positionId, pieceCount }) → 'PROVEN' | 'EVALUATED'`
   — PROVEN iff a `proofs` row exists for the position, or piece count ≤ 7 **and** a `tb_probes`
   row exists (probe cache; populate via the Lichess TB endpoint
   `https://tablebase.lichess.ovh/standard?fen=…` for 6–7 men, local Syzygy for ≤5 when
   available — cache every probe in `tb_probes`).
-- [ ] **Proof-entry detection:** `analyses.proof_entry_ply` = first ply whose position is
+- [x] **Proof-entry detection:** `analyses.proof_entry_ply` = first ply whose position is
   PROVEN by the helper above. `missed_proofs` v1 scope (document it): for positions with
   piece count ≤ 8, check whether any legal move leads to a child position that is already
   PROVEN with a win for the mover while the played move's result position is not — collect
   `{ ply, uci }` entries; anything deeper is out of scope until Phase 2.
-- [ ] **CLI additions:** `run import -- --user <name> --max 5`,
+- [x] **CLI additions:** `run import -- --user <name> --max 5`,
   `run import -- --pgn <file>`, `run analyze-game -- --game-id <id> --tier quick`.
-- [ ] **Unit tests** (no network): PGN fixture with castling + promotion + en passant +
+- [x] **Unit tests** (no network): PGN fixture with castling + promotion + en passant +
   a known ply count; an NDJSON fixture file parsed by the lichess module; proof-entry detection
   on a synthetic endgame PGN reaching a ≤5-man position (mock the TB probe).
 
@@ -1005,6 +1005,17 @@ skip the game with a logged warning, never crash the batch.
 **Commit plan:** `add lichess import and pgn position extraction`,
 `add game analysis pipeline with fog timeline and proof entry detection`,
 `add truth status helper`, progress/ticks, push.
+
+**Result:** the truth-status helper landed one commit earlier than planned --
+proof-entry detection's own required unit test (mocking the TB probe, no live DB)
+only works cleanly if `deriveTruthStatus` already exists as an injectable, DB-free
+predicate, so `packages/db/src/truth.ts` shipped together with `analyzeGame.ts` in
+the second commit. The third commit became a small retrofit instead: point
+`analyzePosition.ts`'s existing (Stage 3) proof check at the new shared helper,
+deleting its private duplicate. Actual commits: `add lichess import and pgn
+position extraction`, `add game analysis pipeline with fog timeline and proof
+entry detection`, `adopt the shared truth status helper in the position
+pipeline`, progress/ticks, push.
 
 ---
 

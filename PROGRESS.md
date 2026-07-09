@@ -182,12 +182,60 @@ inputs the search doesn't yet model:
 2. Syzygy tablebase probing in both prover (as leaf oracle) and verifier
 3. Generate ~10 fortress seed certificates (min 5) and verify against Syzygy
 
-### M4: Game import + analysis
+### 🟡 M4: Game import + analysis (code complete, unit-tested; live acceptance gate pending)
 
-1. Lichess OAuth integration
-2. Game import pipeline (PGN parsing, position extraction)
-3. Deep game analysis (Fog timeline, proof-entry detection)
-4. Two-tier truth labeling (EVALUATED vs. PROVEN)
+**Delivered (2026-07-09):**
+- `services/analysis/src/import/lichess.ts` — public NDJSON game export (no OAuth
+  needed for public games), single-game export, non-standard-variant and
+  missing-`pgn` filtering.
+- `src/import/pgn.ts` — chessops-based `extractPositions`/`extractGames` (ply 0 =
+  startpos convention, documented and reused everywhere positions are enumerated
+  from a game).
+- `src/import/persist.ts` + `importGame.ts` — `upsertGame`, the `positions`
+  counter-table upsert (`occurrence_count` bump, `first_seen_game_id` set only on
+  first insert), bulk `game_positions` insert.
+- `src/pipeline/analyzeGame.ts` — creates the `analyses` row, enqueues every
+  position for engine scoring (quick tier by default; deep games run at
+  canonical tier with a lower BullMQ priority so they don't jump ahead of ad hoc
+  canonical requests), waits on results via BullMQ's `QueueEvents`, assembles the
+  fog timeline, and updates the row to `status: 'done'`.
+- `src/pipeline/proofEntry.ts` — proof-entry-ply and missed-proofs (v1 scope:
+  piece count ≤ 8, direct legal-move children only) detection, with the DB
+  lookups injected as predicates so both are unit-testable against a synthetic
+  endgame PGN without a live database.
+- `packages/db/src/truth.ts` — `deriveTruthStatus`, the single shared
+  EVALUATED-vs-PROVEN decision (proof exists, or piece count ≤ 7 and a
+  `tb_probes` row exists), split into a pure function plus a thin DB-fetching
+  wrapper. `services/analysis`'s Stage 3 position pipeline was retrofitted to
+  call it too, removing what had been a private duplicate of the same check.
+- `src/tablebase/lichess.ts` + `populate.ts` — the `tb_probes` population step
+  Stage 3 explicitly punted ("populate in Stage 4+"): probes
+  `https://tablebase.lichess.ovh/standard?fen=…` on cache miss for positions
+  ≤ 7 men, normalizes the result to White-perspective WDL (reusing the
+  pipeline's one WDL-flip point) + DTZ, and caches it in `tb_probes`.
+  `cursed-win`/`blessed-loss` are stored as draws (the 50-move rule makes them
+  practical draws in real games); `unknown`/`maybe-win`/`maybe-loss` cache
+  nothing. Wired into both proof-entry-ply detection and missed-proofs' "proven
+  win for the mover" check, which previously only consulted the `proofs` table.
+  Local Syzygy probing (≤ 5 men) is still deferred — Lichess's endpoint already
+  covers the full ≤ 7-man range this system checks, so it's a latency/coverage
+  optimization, not a functional gap.
+- CLI: `run import -- --user <name> --max <n>`, `run import -- --pgn <file>`,
+  `run analyze-game -- --game-id <id> --tier quick`.
+- Unit tests (no network, 56 total across the two packages): a hand-verified PGN
+  fixture covering castling + en passant + promotion with a known 31-ply count;
+  an NDJSON fixture exercising the variant/missing-pgn filters; a synthetic
+  6-man-to-5-man endgame PGN (verified move-by-move against chessops) driving
+  both proof-entry-ply and missed-proofs detection with mocked TB-probe/proof
+  predicates; `deriveTruthStatus`'s own pure-logic table; the tablebase
+  category-to-WDL mapping (including the White-perspective flip and the
+  cursed-win/blessed-loss-as-draw simplification).
+
+**Still needed:**
+1. Live acceptance gate: a real Lichess import against `run import -- --user`,
+   `run analyze-game` against a running worker, and the DB spot-checks the
+   roadmap's Stage 4 gate specifies (games/positions/game_positions/analyses
+   shape, `proof_entry_ply` set for a ≤7-man game).
 
 ### M5: Web UI (positions, Frontier map)
 
