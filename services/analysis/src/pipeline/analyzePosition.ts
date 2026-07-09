@@ -10,7 +10,7 @@ import {
   type FogScore,
 } from '@penumbra/core';
 import { computeFogIndex, getCalibration, winProbability, type EngineEvals } from '@penumbra/fog';
-import { schema, type Database } from '@penumbra/db';
+import { schema, isPositionProven, type Database } from '@penumbra/db';
 import { runStockfishLadder, type StockfishResult } from '../engines/stockfish.js';
 import { runLc0, type Lc0Result } from '../engines/lc0.js';
 import { locateEngines } from '../engines/locate.js';
@@ -28,10 +28,6 @@ import {
 import { computeFingerprintForTier } from '../fingerprint.js';
 import type { MultiPvLine } from '../engines/multipv.js';
 
-// Fog Index's tablebase-distance component only means something inside
-// actual Syzygy coverage; a tb_probes cache hit outside that range would be
-// a bug elsewhere, but this gate is defensive either way.
-const SYZYGY_MAX_PIECES = 7;
 // v1 scope for hasChildProof (see docs/ROADMAP.md Stage 3): only direct
 // children of positions this shallow are checked, keeping child-position
 // enumeration cheap and bounding it to the tablebase boundary the formula
@@ -74,7 +70,7 @@ export async function analyzePosition(db: Database, input: AnalyzePositionInput)
   await insertEvalRows(db, positionId, engineFingerprint, stockfish, lc0, stockfishSettings, lc0Settings);
 
   const [hasProof, hasChildProof] = await Promise.all([
-    isPositionIdProven(db, positionId, pieceCount),
+    isPositionProven(db, positionId, pieceCount),
     hasProvenDirectChild(db, fen, pieceCount),
   ]);
 
@@ -198,24 +194,6 @@ function countCriticalMoves(multiPV: MultiPvLine[]): number {
   }).length;
 }
 
-async function isPositionIdProven(db: Database, positionId: number, pieceCount: number): Promise<boolean> {
-  const [proof] = await db
-    .select({ id: schema.proofs.id })
-    .from(schema.proofs)
-    .where(eq(schema.proofs.positionId, positionId))
-    .limit(1);
-  if (proof) return true;
-
-  if (pieceCount > SYZYGY_MAX_PIECES) return false;
-
-  const [tbProbe] = await db
-    .select({ id: schema.tbProbes.id })
-    .from(schema.tbProbes)
-    .where(eq(schema.tbProbes.positionId, positionId))
-    .limit(1);
-  return !!tbProbe;
-}
-
 async function isFenProven(db: Database, fen: string): Promise<boolean> {
   const epd = normalizeEPD(fen);
   const [position] = await db
@@ -225,7 +203,7 @@ async function isFenProven(db: Database, fen: string): Promise<boolean> {
     .limit(1);
   if (!position) return false;
 
-  return isPositionIdProven(db, position.id, getPieceCount(fen));
+  return isPositionProven(db, position.id, getPieceCount(fen));
 }
 
 async function hasProvenDirectChild(db: Database, fen: string, pieceCount: number): Promise<boolean> {
