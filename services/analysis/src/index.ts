@@ -31,3 +31,13 @@ export {
   analyzePositionJobId,
   type AnalyzePositionJobData,
 } from './queue/queues.js';
+export { extractPositions, extractGames, type ExtractedPosition, type ParsedGame } from './import/pgn.js';
+export {
+  streamUserGames,
+  fetchGame,
+  parseLichessGame,
+  parseLichessGameLine,
+  type LichessGame,
+} from './import/lichess.js';
+export { upsertGame, upsertPositions, insertGamePositions, type UpsertGameInput } from './import/persist.js';
+export { importGame, type ImportGameResult } from './import/importGame.js';

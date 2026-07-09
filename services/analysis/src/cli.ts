@@ -1,12 +1,13 @@
 import { getDatabase } from '@penumbra/db';
 import { analyzePosition } from './pipeline/analyzePosition.js';
 import type { Tier } from './engines/config.js';
+import { runImportCommand } from './cli/import.js';
 
 function databaseUrl(): string {
   return process.env.DATABASE_URL || 'postgresql://penumbra:penumbra@localhost:5432/penumbra';
 }
 
-function parseArgs(argv: string[]): { fen: string; tier: Tier; json: boolean } {
+function parseAnalyzeArgs(argv: string[]): { fen: string; tier: Tier; json: boolean } {
   let fen: string | undefined;
   let tier: Tier = 'quick';
   let json = false;
@@ -39,8 +40,8 @@ function parseArgs(argv: string[]): { fen: string; tier: Tier; json: boolean } {
   return { fen, tier, json };
 }
 
-async function main() {
-  const { fen, tier, json } = parseArgs(process.argv.slice(2));
+async function runAnalyzeCommand(argv: string[]): Promise<void> {
+  const { fen, tier, json } = parseAnalyzeArgs(argv);
   const db = await getDatabase(databaseUrl());
   const result = await analyzePosition(db, { fen, tier });
 
@@ -52,11 +53,24 @@ async function main() {
     console.log(`percentile: ${result.percentile ?? 'n/a'}`);
     console.log(`engine fingerprint: ${result.engineFingerprint}`);
   }
+}
+
+async function main() {
+  const [command, ...rest] = process.argv.slice(2);
+
+  if (command === 'import') {
+    await runImportCommand(rest, databaseUrl());
+  } else {
+    // Backward-compatible default: the "analyze" npm script forwards bare
+    // `--fen ... --tier ... --json` with no leading subcommand token.
+    const argv = command === undefined ? [] : [command, ...rest];
+    await runAnalyzeCommand(argv);
+  }
 
   process.exit(0);
 }
 
 main().catch((err) => {
-  console.error('analyze failed:', err.message);
+  console.error('command failed:', err.message);
   process.exit(1);
 });

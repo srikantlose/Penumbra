@@ -1,0 +1,11 @@
+[Event "Fixture Game"]
+[Site "https://lichess.org/fixture"]
+[Date "2026.01.01"]
+[Round "1"]
+[White "Fixture White"]
+[Black "Fixture Black"]
+[Result "*"]
+
+1. e4 d5 2. exd5 Qxd5 3. Nc3 Qa5 4. d4 Nf6 5. Nf3 Bg4 6. Be2 e6 7. O-O Nbd7
+8. h3 Bxf3 9. Bxf3 a6 10. d5 c5 11. dxc6 bxc6 12. b4 Qa4 13. b5 Qa5 14. b6
+Qa4 15. b7 Qa5 16. b8=Q *

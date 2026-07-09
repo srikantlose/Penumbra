@@ -13,6 +13,7 @@
     "test": "vitest run",
     "clean": "rm -rf dist",
     "analyze": "node dist/cli.js",
+    "import": "node dist/cli.js import",
     "worker": "node dist/queue/worker.js",
     "repro-test": "node dist/scripts/repro-test.js",
     "repro-test:canonical": "node dist/scripts/repro-test.js --tier canonical"
