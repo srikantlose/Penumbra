@@ -2,6 +2,7 @@ import { getDatabase } from '@penumbra/db';
 import { analyzePosition } from './pipeline/analyzePosition.js';
 import type { Tier } from './engines/config.js';
 import { runImportCommand } from './cli/import.js';
+import { runAnalyzeGameCommand } from './cli/analyzeGame.js';
 
 function databaseUrl(): string {
   return process.env.DATABASE_URL || 'postgresql://penumbra:penumbra@localhost:5432/penumbra';
@@ -60,6 +61,8 @@ async function main() {
 
   if (command === 'import') {
     await runImportCommand(rest, databaseUrl());
+  } else if (command === 'analyze-game') {
+    await runAnalyzeGameCommand(rest, databaseUrl());
   } else {
     // Backward-compatible default: the "analyze" npm script forwards bare
     // `--fen ... --tier ... --json` with no leading subcommand token.

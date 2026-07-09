@@ -30,6 +30,7 @@ export {
   enqueueAnalyzePosition,
   analyzePositionJobId,
   type AnalyzePositionJobData,
+  type AnalyzePositionJobResult,
 } from './queue/queues.js';
 export { extractPositions, extractGames, type ExtractedPosition, type ParsedGame } from './import/pgn.js';
 export {
@@ -41,3 +42,17 @@ export {
 } from './import/lichess.js';
 export { upsertGame, upsertPositions, insertGamePositions, type UpsertGameInput } from './import/persist.js';
 export { importGame, type ImportGameResult } from './import/importGame.js';
+export {
+  detectProofEntryPly,
+  detectMissedProofs,
+  MISSED_PROOF_MAX_PIECES,
+  type AnalyzedPosition,
+  type MissedProofEntry,
+} from './pipeline/proofEntry.js';
+export {
+  analyzeGame,
+  type AnalysisTier,
+  type AnalyzeGameInput,
+  type AnalyzeGameOutput,
+  type FogTimelineEntry,
+} from './pipeline/analyzeGame.js';

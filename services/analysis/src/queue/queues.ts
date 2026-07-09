@@ -1,6 +1,6 @@
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
-import { normalizeEPD } from '@penumbra/core';
+import { normalizeEPD, type TruthStatus } from '@penumbra/core';
 import type { Tier } from '../engines/config.js';
 import { computeFingerprintForTier } from '../fingerprint.js';
 
@@ -18,6 +18,17 @@ export interface AnalyzePositionJobData {
   tier: Tier;
 }
 
+// What the worker's processor returns on completion -- consumed both by
+// direct callers (none yet) and by analyzeGame.ts, which awaits each job via
+// Job.waitUntilFinished() to assemble a game's fog timeline.
+export interface AnalyzePositionJobResult {
+  positionId: number;
+  score: number;
+  percentile: number | null;
+  status: TruthStatus;
+  engineFingerprint: string;
+}
+
 export function redisUrl(): string {
   return process.env.REDIS_URL || 'redis://localhost:6379';
 }
@@ -30,8 +41,8 @@ export function createRedisConnection(): IORedis {
 export function createAnalyzePositionQueue(
   tier: Tier,
   connection: IORedis = createRedisConnection()
-): Queue<AnalyzePositionJobData> {
-  return new Queue<AnalyzePositionJobData>(queueNameForTier(tier), { connection });
+): Queue<AnalyzePositionJobData, AnalyzePositionJobResult> {
+  return new Queue<AnalyzePositionJobData, AnalyzePositionJobResult>(queueNameForTier(tier), { connection });
 }
 
 /**
@@ -45,11 +56,12 @@ export function analyzePositionJobId(fen: string, tier: Tier): string {
 }
 
 export async function enqueueAnalyzePosition(
-  queue: Queue<AnalyzePositionJobData>,
+  queue: Queue<AnalyzePositionJobData, AnalyzePositionJobResult>,
   fen: string,
-  tier: Tier
+  tier: Tier,
+  opts: { priority?: number } = {}
 ): Promise<string> {
   const jobId = analyzePositionJobId(fen, tier);
-  await queue.add('analyze-position', { fen, tier }, { jobId });
+  await queue.add('analyze-position', { fen, tier }, { jobId, priority: opts.priority });
   return jobId;
 }

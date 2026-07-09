@@ -1,4 +1,5 @@
 export * from './schema.js';
+export * from './truth.js';
 
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Client } from 'pg';
