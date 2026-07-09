@@ -11,6 +11,7 @@ import {
   queueNameForTier,
 } from '../queue/queues.js';
 import { detectMissedProofs, detectProofEntryPly, type AnalyzedPosition, type MissedProofEntry } from './proofEntry.js';
+import { ensureTablebaseProbe } from '../tablebase/populate.js';
 
 // analyses.tier speaks the game-analysis vocabulary ('quick' | 'deep'), not
 // the engine-settings vocabulary ('quick' | 'canonical') -- 'deep' enqueues
@@ -99,8 +100,14 @@ export async function analyzeGame(db: Database, input: AnalyzeGameInput): Promis
       fingerprint: results[i].engineFingerprint,
     }));
 
+    const epdByPositionId = new Map(positions.map((position) => [position.positionId, position.epd]));
+
     const [proofEntryPly, missedProofs] = await Promise.all([
-      detectProofEntryPly(positions, (positionId, pieceCount) => isPositionProven(db, positionId, pieceCount)),
+      detectProofEntryPly(positions, async (positionId, pieceCount) => {
+        const epd = epdByPositionId.get(positionId);
+        if (epd) await ensureTablebaseProbe(db, positionId, epdToFen(epd), pieceCount);
+        return isPositionProven(db, positionId, pieceCount);
+      }),
       detectMissedProofs(positions, (fen, mover) => isProvenWinForMover(db, fen, mover)),
     ]);
 
@@ -169,7 +176,7 @@ function epdToFen(epd: string): string {
 async function isProvenWinForMover(db: Database, fen: string, mover: 'white' | 'black'): Promise<boolean> {
   const epd = normalizeEPD(fen);
   const [position] = await db
-    .select({ id: schema.positions.id })
+    .select({ id: schema.positions.id, pieceCount: schema.positions.pieceCount })
     .from(schema.positions)
     .where(eq(schema.positions.epd, epd))
     .limit(1);
@@ -180,8 +187,22 @@ async function isProvenWinForMover(db: Database, fen: string, mover: 'white' | '
     .from(schema.proofs)
     .where(eq(schema.proofs.positionId, position.id))
     .limit(1);
-  if (!proof) return false;
+  if (proof) {
+    const claim = proof.claim as { side?: string };
+    if (proof.value === 'win' && claim.side === mover) return true;
+  }
 
-  const claim = proof.claim as { side?: string };
-  return proof.value === 'win' && claim.side === mover;
+  // Fall back to a tablebase-cache-backed win (probing Lichess on cache
+  // miss). wdlW/wdlL are stored White-perspective, so "mover wins" reads
+  // wdlW for White or wdlL for Black.
+  await ensureTablebaseProbe(db, position.id, fen, position.pieceCount);
+  const [tbProbe] = await db
+    .select({ wdlW: schema.tbProbes.wdlW, wdlL: schema.tbProbes.wdlL })
+    .from(schema.tbProbes)
+    .where(eq(schema.tbProbes.positionId, position.id))
+    .limit(1);
+  if (!tbProbe) return false;
+
+  const moverWins = mover === 'white' ? tbProbe.wdlW : tbProbe.wdlL;
+  return (moverWins ?? 0) > 0;
 }

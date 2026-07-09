@@ -49,6 +49,8 @@ export {
   type AnalyzedPosition,
   type MissedProofEntry,
 } from './pipeline/proofEntry.js';
+export { probeTablebase, parseTablebaseResponse, type TablebaseProbeResult } from './tablebase/lichess.js';
+export { ensureTablebaseProbe } from './tablebase/populate.js';
 export {
   analyzeGame,
   type AnalysisTier,
