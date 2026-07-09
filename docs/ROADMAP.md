@@ -1017,6 +1017,20 @@ position extraction`, `add game analysis pipeline with fog timeline and proof
 entry detection`, `adopt the shared truth status helper in the position
 pipeline`, progress/ticks, push.
 
+**Acceptance gate: passed (2026-07-10).** Running it live surfaced two pre-existing
+bugs the gate exists to catch (a colon-in-identifier BullMQ rejection, live-tested
+for the first time here since Stage 3's worker had never actually run against Redis)
+and two real gaps in `analyzeGame.ts` only visible with a full real game's worth of
+positions (a per-job wait ttl that counted from enqueue rather than job-start, and
+no handling for a checkmate/stalemate position's terminal all-legal-moves-exhausted
+case). All four fixed in a follow-up commit (`fix analyze-game queue bugs surfaced
+by the live acceptance gate`), re-verified against the same live game, then pushed.
+Full account, including a non-reproducing Stockfish-crash investigation traced to
+Docker Desktop's idle auto-pause rather than a code bug, is in `PROGRESS.md`'s M4
+section. These decisions (the fixes and the choice not to chase the non-reproducing
+crash further) were made autonomously, per standing instruction, without pausing
+for user sign-off -- see `HANDOFF.md`.
+
 ---
 
 ## Stage 5 — M6 (API half, pulled early): `apps/api`

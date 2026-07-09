@@ -182,7 +182,7 @@ inputs the search doesn't yet model:
 2. Syzygy tablebase probing in both prover (as leaf oracle) and verifier
 3. Generate ~10 fortress seed certificates (min 5) and verify against Syzygy
 
-### 🟡 M4: Game import + analysis (code complete, unit-tested; live acceptance gate pending)
+### ✅ M4: Game import + analysis (complete, live acceptance gate passed)
 
 **Delivered (2026-07-09):**
 - `services/analysis/src/import/lichess.ts` — public NDJSON game export (no OAuth
@@ -231,11 +231,47 @@ inputs the search doesn't yet model:
   category-to-WDL mapping (including the White-perspective flip and the
   cursed-win/blessed-loss-as-draw simplification).
 
-**Still needed:**
-1. Live acceptance gate: a real Lichess import against `run import -- --user`,
-   `run analyze-game` against a running worker, and the DB spot-checks the
-   roadmap's Stage 4 gate specifies (games/positions/game_positions/analyses
-   shape, `proof_entry_ply` set for a ≤7-man game).
+**Live acceptance gate (2026-07-10):** `run import -- --user DrNykterstein --max 5`
+against the real Lichess API (5 real games, ids 4-8), then
+`run analyze-game -- --game-id 7 --tier quick` against a running worker.
+DB spot-checks: `analyses` row `status='done'`, 49-entry `fog_timeline`,
+`engine_fingerprint` set, `completed_at` set; `proof_entry_ply` correctly
+`null` (this game never reached ≤7 men before mate).
+
+Two real bugs only surfaced once a full real game ran end-to-end against
+the live worker (never exercised live before this session — see Stage 3's
+handoff note); both fixed and covered by the existing test suite:
+- **BullMQ colon rejection** (pre-existing Stage 3 bug, never triggered until
+  this was the first live run of `queue/worker.ts`): this installed BullMQ
+  version rejects `:` in both queue names and custom job IDs. Fixed
+  `queueNameForTier` (`analyze-position:${tier}` → `analyze-position-${tier}`)
+  and `analyzePositionJobId`'s separator (`:` → `__`).
+- **Per-job wait ttl counted from enqueue time, not job start:** a flat
+  10-minute `waitUntilFinished` ttl could expire on a position still
+  legitimately queued behind ~40 others in a 49-ply game. Now scales with
+  the game's own position count.
+- **Checkmate/stalemate positions had no engine path:** a position with zero
+  legal moves makes Stockfish report no `wdl`, which `runStockfishLadder`
+  correctly turned into a thrown error — but `analyzeGame.ts` had nothing
+  upstream to catch that for a real game's final position. Now detected
+  before enqueueing and given a certain, zero-fog `PROVEN` timeline entry
+  directly, skipping the engine entirely (chess rules guarantee it can only
+  ever be the last position in a game).
+
+A separate, non-reproducing anomaly was investigated at length during this
+same session: an initial live run saw ~21 `stockfish.exe` process crashes
+(Windows `STATUS_INTEGER_DIVIDE_BY_ZERO`) across many different positions.
+Extensive isolated repro attempts (raw concurrent Stockfish spawns, the full
+production ladder sequentially and concurrently across all 49 real
+positions, the real `analyzePosition()` pipeline with sustained concurrency)
+never reproduced a single crash. The eventual, most likely explanation:
+Docker Desktop's idle auto-pause froze Postgres/Redis mid-run partway
+through this same investigation (confirmed via `docker desktop status` and
+a Postgres `terminating connection due to administrator command` error) — a
+VM freeze/thaw cycle disrupting host process scheduling mid-search is a
+plausible cause for a stray native crash that no controlled test could
+reproduce. Not treated as a code bug; no fix applied beyond running the
+final verification pass with a Docker keep-alive guard.
 
 ### M5: Web UI (positions, Frontier map)
 
