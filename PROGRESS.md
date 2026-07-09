@@ -4,8 +4,8 @@
 
 This document tracks the implementation status of Penumbra Phase 1 (MVP). The work is organized by milestone and includes both completed components and next steps.
 
-**As of:** 2026-07-08  
-**Status:** Foundations + core systems verified end-to-end; PNS prover now emits forced-mate certificates that round-trip through the verifier; web skeleton up in the locked retro design system; hardening pass complete (verifier semantic verification, Polyglot zobrist, RFC 8785 hashing, real DB constraints, green CI) — see `docs/ROADMAP.md` for the detailed forward plan through launch  
+**As of:** 2026-07-09  
+**Status:** Foundations + core systems verified end-to-end; PNS prover now emits forced-mate certificates that round-trip through the verifier; web skeleton up in the locked retro design system; hardening pass complete (verifier semantic verification, Polyglot zobrist, RFC 8785 hashing, real DB constraints, green CI); `services/analysis` (Stage 3, UCI orchestration worker) now lands real Stockfish + Lc0 evals and fog scores in Postgres end-to-end — see `docs/ROADMAP.md` for the detailed forward plan through launch  
 **Commits shipped:** 23
 
 ## Completed milestones
@@ -51,9 +51,10 @@ This document tracks the implementation status of Penumbra Phase 1 (MVP). The wo
 **Still needed:**
 - External spec review and public announcement
 
-### ✅ M3: Fog Index v0.1 (partial, ~4 weeks)
+### ✅ M3: Fog Index v0.1 + UCI orchestration (complete)
 
-**Objective:** Implement the Fog Index metric and calibration.
+**Objective:** Implement the Fog Index metric, calibration, and the engine orchestration worker
+that actually produces evals from real engines.
 
 **Delivered:**
 - `packages/fog`: complete formula implementation
@@ -63,10 +64,32 @@ This document tracks the implementation status of Penumbra Phase 1 (MVP). The wo
 - Calibration CDF (100k position corpus, percentile lookups)
 - Comprehensive methodology documentation (`docs/FOG_INDEX_METHODOLOGY.md`)
 - Deterministic, reproducible formula (single-threaded fixed-node search)
+- `services/analysis` (`@penumbra/analysis`, 2026-07-09): the UCI worker itself —
+  `UciClient` (spawn + line protocol over real Stockfish/Lc0 subprocesses, timeout guards,
+  Windows-safe kill), a pure `parseInfoLine`/`parseBestMove` parser unit-tested against
+  committed real engine transcripts, engine adapters producing the exact `EngineEvals` shape
+  `packages/fog` needs with WDL normalized to White's perspective in one place, the full
+  `analyzePosition` pipeline (position upsert, append-only `evals`/`fog_scores` writes, a
+  direct-children proof gate via real chess move generation), a BullMQ queue/worker split by
+  tier (canonical concurrency 1, quick concurrency 2), and a `cli.ts`/`repro-test` pair. Verified
+  end-to-end against real Postgres + real engine binaries, not just unit tests: the `analyze`
+  CLI produces real fog JSON and the expected DB rows, and `repro-test` confirms byte-identical
+  output across repeated runs.
+- `scripts/fetch-engines.mjs` + `docs/ENGINES.md`: pinned, sha256-verified Stockfish 18 and Lc0
+  v0.32.1 downloads. The Lc0 backend/network/node-count pin took real investigation, not the
+  roadmap's original assumption — see below.
 
-**Still needed:**
-- UCI orchestration service (Stockfish + Lc0 runners)
-- Game import pipeline and analysis service
+**Real-world finding that reshaped the Lc0 pin:** the roadmap assumed an explicit CUDA backend
+(`cuda-fp32`) would give deterministic GPU evals, falling back to a CPU backend if not. In
+practice: `cuda-fp32` doesn't exist on the pinned build; the closest explicit CUDA backend
+(`cuda`) proved non-deterministic across repeated runs at fixed node counts (confirmed via
+`repro-test`, including with `MinibatchSize=1` to rule out batching races — residual cuBLAS
+kernel-selection nondeterminism, not fixable via UCI options); the CPU (`blas`/OpenBLAS) backend
+is deterministic but per-node cost turned out dominated by backend overhead rather than network
+size (a ~380MB top-tier net and a ~19MB legacy net both took minutes per 30k-node search on this
+hardware). Net result: CPU backend + a modern "distilled" network (small but trained to
+approximate a much larger net) + node count reduced from the spec'd 30k to 2k (~30s/search,
+user-approved tradeoff) — full timing data and reasoning in `docs/ENGINES.md`.
 
 ### ✅ Database schema (partial, ~2 weeks)
 
@@ -158,14 +181,6 @@ inputs the search doesn't yet model:
    repetition/50-move closure (the search currently only bottoms out at mates)
 2. Syzygy tablebase probing in both prover (as leaf oracle) and verifier
 3. Generate ~10 fortress seed certificates (min 5) and verify against Syzygy
-
-### M3 remainder: UCI orchestration
-
-High-priority next work:
-1. `services/analysis`: Stockfish + Lc0 subprocess orchestration
-2. Cached eval storage (position → engines → WDL ladder)
-3. Fog computation pipeline (batch job + caching)
-4. Engine lifecycle management (subprocess pooling, cleanup)
 
 ### M4: Game import + analysis
 
@@ -276,7 +291,7 @@ penumbra/
 │  ├─ web/          # 🟡 Next.js + Tailwind, retro 8-bit design system locked; 6 routes built
 │  └─ api/          # Fastify: public API v1, BFF (TBD)
 ├─ services/
-│  └─ analysis/     # Worker: UCI, fog computation (TBD)
+│  └─ analysis/     # ✅ UCI worker: Stockfish + Lc0 orchestration, fog computation, BullMQ queue
 ├─ packages/
 │  ├─ core/         # ✅ types, EPD, zobrist
 │  ├─ fog/          # ✅ formula, calibration
@@ -318,7 +333,9 @@ penumbra/
 - [x] M1: Golden test suite green; mutations fail with correct exit codes (`cargo test` in `rust/`, 4/4 passing; CLI exit codes confirmed manually)
 - [x] M2 (core): PNS prover emits forced-mate WIN certs that `penumbra-verify` accepts (`cargo test -p penumbra-prover`, 6/6; 3 example certs verify clean)
 - [x] M2 (fortress): 10 fortress `at_least_draw` certs generated and verified against Syzygy (`cargo test --workspace`, 32/32; acceptance gate run verbatim, `Valid: true`/`Probes: 9` with `--syzygy`, `Valid: false` without)
-- [ ] M3: Fog reproducibility test (same FEN twice → byte-identical score)
+- [x] M3: Fog reproducibility test (same FEN twice → byte-identical score) — `repro-test`
+  (quick tier) against real Stockfish + Lc0, 3 fixed positions, REPRO OK; `analyze` CLI verified
+  against real Postgres (evals rows + 1 fog_scores row per run)
 - [ ] M4: Import real Lichess game → analyze → fog timeline renders
 - [ ] M5: Position page shows provenance + eval history + fog
 - [ ] M6: `/v1/fog?fen=...` returns 202 then score; verifier binary available on crates.io
@@ -346,13 +363,27 @@ in `docs/ROADMAP.md` — that file is the forward-looking plan; this section jus
 - `penumbra-verify`'s `main()` always returned `Ok(())` regardless of verification outcome, so the CLI exited 0 even for an invalid certificate. Now returns `ExitCode::SUCCESS`/`FAILURE` based on `report.valid`.
 - `drizzle-kit`/`drizzle-orm` were pinned to versions (`0.20`/`0.30`) predating the unified CLI the scripts assumed (`generate`/`migrate`/`push`/`drop`/`studio`); bumped to `drizzle-kit ^0.24.0` / `drizzle-orm ^0.33.0` and moved the DB scripts to the root `package.json` (drizzle-kit resolves config-relative paths against the process cwd, not the config file's location, so it has to run from the repo root where `drizzle.config.ts` lives).
 
+### Bugs found and fixed during Stage 3 (`services/analysis`)
+
+- `packages/db`'s exported `Database` type was `ReturnType<typeof getDatabase>`, but
+  `getDatabase` is `async` — its real return type is `Promise<NodePgDatabase<...>>`, so any
+  function typed to accept `Database` and then call `.insert()`/`.select()` on it would fail to
+  compile. Nothing had actually consumed the type before `services/analysis`'s pipeline did, so
+  this was latent since the type was introduced. Fixed to `Awaited<ReturnType<typeof
+  getDatabase>>`.
+- `bullmq` pins an exact `ioredis` version (`5.10.1`); `@penumbra/analysis`'s own
+  `"ioredis": "^5.0.0"` dependency resolved to a newer `5.11.1`, giving pnpm two structurally
+  incompatible copies and a wall of TypeScript errors when an `IORedis` instance was passed into
+  a `Queue`/`Worker`'s `connection` option. Fixed with a `pnpm-workspace.yaml` `overrides` entry
+  pinning `ioredis` to a single version workspace-wide.
+
 ---
 
-**Next action:** Stage 1 (hardening) and Stage 2 (M2 fortress track) are both done — Syzygy
-tablebases fetched, prover `--claim at_least_draw --syzygy <dir>` (real WDL leaf oracle +
-transposition terminals), verifier `--syzygy <dir>` (real WDL probing), and 10 committed fortress
-seed certs across all three tiers (`rust/prover/examples/fortress/`), all verifying clean.
-Milestone M2 is complete. Next per `docs/ROADMAP.md` is Stage 3: `services/analysis`, the UCI
-orchestration worker that lands real engine evals + fog scores in Postgres. `docs/ROADMAP.md` has
-the full task-by-task plan through Stage 7 (launch) — treat it as the authoritative "what's
-next," not this section.
+**Next action:** Stages 1-3 are all done — hardening, the M2 fortress track (Syzygy tablebases,
+`at_least_draw` proofs, 10 committed fortress certs), and now Stage 3 (`services/analysis`, the
+UCI orchestration worker) landing real Stockfish + Lc0 evals and fog scores in Postgres, verified
+end-to-end against real engine binaries and a real database, with `repro-test` confirming
+byte-identical reproducibility. Milestones M2 and M3 are both complete. Next per `docs/ROADMAP.md`
+is Stage 4: game import + analysis (Lichess OAuth, PGN parsing, fog timeline, two-tier truth
+labeling). `docs/ROADMAP.md` has the full task-by-task plan through Stage 7 (launch) — treat it as
+the authoritative "what's next," not this section.

@@ -809,7 +809,7 @@ docs/ENGINES.md
 
 **Tasks:**
 
-- [ ] **`uci/client.ts`** —
+- [x] **`uci/client.ts`** —
 
   ```ts
   class UciClient {
@@ -825,12 +825,12 @@ docs/ENGINES.md
 
   Line-buffer stdout (split on `\n`, keep partial tails). Reject on engine exit before
   `bestmove`. Timeout guard (default 10 min/search) that kills and rejects.
-- [ ] **`uci/parse.ts`** — pure parser:
+- [x] **`uci/parse.ts`** — pure parser:
   `parseInfoLine(line) → { multipv?, depth?, nodes?, scoreCp?, scoreMate?, wdl?: {w,d,l}, pv? } | null`.
   Handles `score cp -13`, `score mate 3`, `wdl 124 812 64`, `multipv 2`. Unit tests against
   **committed transcript fixtures** (`services/analysis/test-fixtures/*.txt` — capture a real
   SF and Lc0 transcript once during implementation, commit them) so CI needs no engine binary.
-- [ ] **`engines/config.ts`** — the canonical contract (from `docs/FOG_INDEX_METHODOLOGY.md`):
+- [x] **`engines/config.ts`** — the canonical contract (from `docs/FOG_INDEX_METHODOLOGY.md`):
 
   ```ts
   export const STOCKFISH_CANONICAL = {
@@ -841,7 +841,7 @@ docs/ENGINES.md
   export const LC0_CANONICAL = { options: { MultiPV: 4 }, nodes: 30_000 };
   ```
 
-- [ ] **`fingerprint.ts`** — exact definition (uses cert-schema's `canonicalizeJSON`):
+- [x] **`fingerprint.ts`** — exact definition (uses cert-schema's `canonicalizeJSON`):
 
   ```ts
   computeEngineFingerprint({
@@ -853,14 +853,14 @@ docs/ENGINES.md
 
   The quick tier gets its **own honest fingerprint** (different ladder ⇒ different fingerprint
   ⇒ separate `fog_scores` rows). Never label quick output with the canonical fingerprint.
-- [ ] **`scripts/fetch-engines.mjs`** — downloads pinned engine builds into gitignored
+- [x] **`scripts/fetch-engines.mjs`** — downloads pinned engine builds into gitignored
   `engines/` (add to `.gitignore`): a Stockfish release win-x86-64-avx2 zip and a matching
   Lc0 CUDA build + one pinned network file. **Pin at implementation time:** pick the latest
   stable release of each, record exact version, URL, and sha256 in `docs/ENGINES.md` (a table:
   component / version / URL / sha256 / date). The script verifies sha256 after download and is
   idempotent. Lc0 needs its CUDA DLLs from the release zip; the RTX 4060 + driver already
   present suffice.
-- [ ] **`engines/stockfish.ts` / `engines/lc0.ts`** — produce exactly the shape
+- [x] **`engines/stockfish.ts` / `engines/lc0.ts`** — produce exactly the shape
   `packages/fog` needs (`EngineEvals` in `packages/fog/src/formula.ts`):
   `stockfishWdl: [{nodes, wins, draws, losses}, …]` (one entry per rung, ladder order, rung-4
   multipv-1 WDL per rung) and `lc0Wdl: [{…}]` (single deep entry). Also return the rung-4
@@ -873,7 +873,7 @@ docs/ENGINES.md
   `UCI_ShowWDL`-equivalent? Lc0 emits WDL natively when `--show-wdl`/option enabled — check
   `lc0 --help` at pin time and record in ENGINES.md; fallback: convert `score cp` via Lc0's
   documented cp↔winprob mapping and note it).
-- [ ] **`pipeline/analyzePosition.ts`** —
+- [x] **`pipeline/analyzePosition.ts`** —
   1. `normalizeEPD(fen)` + `computeZobristHash` (`@penumbra/core`); upsert into `positions`
      (`ON CONFLICT (epd) DO NOTHING`, then select id).
   2. Run engines per tier; write **one `evals` row per engine × rung × multipv rank**
@@ -888,18 +888,24 @@ docs/ENGINES.md
   5. Insert `fog_scores` with `ON CONFLICT DO NOTHING` on the unique
      (position_id, formula_version, engine_fingerprint) index — re-analysis with an identical
      fingerprint is a no-op, preserving append-only semantics.
-- [ ] **`queue/worker.ts`** — BullMQ worker for `analyze-position`
+- [x] **`queue/worker.ts`** — BullMQ worker for `analyze-position`
   (`jobId = epd + ':' + fingerprint` for idempotent dedupe), canonical queue concurrency **1**
   (determinism + the 64M rung is CPU-saturating), quick queue concurrency 2. Graceful
   shutdown kills engine children (`proc.kill()`; Windows has no POSIX signals).
-- [ ] **`cli.ts`** — `pnpm --filter @penumbra/analysis run analyze -- --fen "<fen>" --tier
+- [x] **`cli.ts`** — `pnpm --filter @penumbra/analysis run analyze -- --fen "<fen>" --tier
   quick --json`: runs the pipeline inline (no queue), prints the fog JSON.
-- [ ] **`repro-test` script** (package.json script): runs the **quick** ladder twice on 3 fixed
+- [x] **`repro-test` script** (package.json script): runs the **quick** ladder twice on 3 fixed
   FENs, asserts the two canonical-JSON outputs are byte-identical. Canonical-tier repro
   (2 × ~90 s/position) is a manual script (`repro-test:canonical`), run once and record the
   result in ENGINES.md. **If Lc0 flakes** (GPU nondeterminism): pin `--backend=cuda-fp32`; if
   still flaky, fall back to a CPU backend (`blas`/`eigen` — 30k nodes is CPU-feasible) — record
   whichever backend wins in ENGINES.md and bake it into the fingerprint.
+  **Result:** `cuda-fp32` doesn't exist on the pinned build; plain `cuda` (incl. with
+  `MinibatchSize=1`) was verified non-deterministic; `blas` was verified deterministic but 30k
+  nodes cost 5-8 min/search regardless of network size on this hardware — node count reduced to
+  2k (user-approved) after measuring per-node cost is backend-overhead-bound, not FLOPs-bound.
+  Full quick-tier `repro-test` passes byte-identical on all 3 fixed positions with the final
+  pin. See `docs/ENGINES.md` for the complete investigation and timing data.
 
 **Acceptance gate:**
 
