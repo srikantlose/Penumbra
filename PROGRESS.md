@@ -6,7 +6,7 @@ This document tracks the implementation status of Penumbra Phase 1 (MVP). The wo
 
 **As of:** 2026-07-11  
 **Status:** Foundations + core systems verified end-to-end; PNS prover now emits forced-mate certificates that round-trip through the verifier; web skeleton up in the locked retro design system; hardening pass complete (verifier semantic verification, Polyglot zobrist, RFC 8785 hashing, real DB constraints, green CI); `services/analysis` (Stage 3, UCI orchestration worker) lands real Stockfish + Lc0 evals and fog scores in Postgres end-to-end; game import + analysis (Stage 4) passed its live acceptance gate; `apps/api` (Stage 5, M6's API half) now serves the public v1 API + BFF endpoints and writes the hash-chained proof ledger, also verified end-to-end against real infra — see `docs/ROADMAP.md` for the detailed forward plan through launch  
-**Commits shipped:** 24
+**Commits shipped:** 48
 
 ## Completed milestones
 
