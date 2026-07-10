@@ -130,7 +130,7 @@ Node ≥18 (CI uses 20 after Stage 1.5), pnpm 9.15.0 (`packageManager` field), R
 | 3 | M3 remainder | `services/analysis`: UCI orchestration, fog pipeline | done |
 | 4 | M4 | Lichess import, PGN extraction, game analysis, truth labeling | done |
 | 5 | M6 (API part, pulled early) | `apps/api` Fastify public v1 + BFF + ledger writer | done |
-| 6 | M5 remainder | wire web to live data, journey page, assets, smoke tests | pending |
+| 6 | M5 remainder | wire web to live data, journey page, assets, smoke tests | done |
 | 7 | M6 (launch part) | license split, crates.io, releases, deploy, methodology final | pending |
 
 Stage 5 (API) deliberately runs **before** Stage 6 (web wiring): the web pages need endpoints to
@@ -1136,15 +1136,15 @@ goes green here.
 
 **Tasks:**
 
-- [ ] `apps/web/src/lib/api.ts` — typed fetch helpers for every consumed endpoint; base URL
+- [x] `apps/web/src/lib/api.ts` — typed fetch helpers for every consumed endpoint; base URL
   from `NEXT_PUBLIC_API_URL` (default `http://localhost:3001`). Server components fetch
   directly; the `/board` fog-poll is client-side (202 → retry with backoff until 200).
-- [ ] **Assets:** create `apps/web/public/logo.png` and `apps/web/public/avatar.png` (design a
+- [x] **Assets:** create `apps/web/public/logo.png` and `apps/web/public/avatar.png` (design a
   simple B&W pixel logo consistent with the locked design system — a dithered half-moon
   "penumbra" mark works; any locally-produced asset beats the dead Stitch hotlinks). Replace
   the two `lh3.googleusercontent.com` `<img>` srcs (in `src/app/page.tsx` and
   `src/components/stitch/TopNavBar.tsx` / board page avatar).
-- [ ] Page wiring (keep layouts; swap hardcoded consts for fetched data):
+- [x] Page wiring (keep layouts; swap hardcoded consts for fetched data):
   - `/` ← `GET /bff/stats` (hero numbers, real global fog gauge).
   - `/board` ← FEN input → fog poll → `FogIndexCard`; `GET /v1/positions/{zobrist}` → engine
     ladder + archaeology list (evals grouped by fingerprint, append-only history order).
@@ -1159,13 +1159,13 @@ goes green here.
   - **`/journey` (new):** username form → `POST /bff/import` → progress → analyzed-game list →
     per-game fog timeline (reuse the `/board` timeline component) with proof-entry markers.
     Add JOURNEY to `TopNavBar`.
-- [ ] Delete dead `ScreenSlot.tsx` (no route uses it since the spec-built pages landed).
-- [ ] **Playwright smoke** (`apps/web/tests/*.spec.ts` + `playwright.config.ts`, devDep
+- [x] Delete dead `ScreenSlot.tsx` (no route uses it since the spec-built pages landed).
+- [x] **Playwright smoke** (`apps/web/tests/*.spec.ts` + `playwright.config.ts`, devDep
   `@playwright/test`): boots web+api against docker services; per route: renders, zero console
   errors (the ShaderBackground WebGL check pattern already proved out); one live fog round-trip
   (202→200); proofs page shows ≥1 real cert; journey imports a tiny public account (or a
   seeded fixture user when offline).
-- [ ] **Design-system overflow check** (the Press Start 2P lesson): eyeball every new
+- [x] **Design-system overflow check** (the Press Start 2P lesson): eyeball every new
   data-bearing table/grid at `data-mono` size with real data lengths (zobrist hex, SHA256
   strings are the usual offenders — truncate middle with `…` where needed).
 
@@ -1181,6 +1181,32 @@ pnpm build                                          # web still builds staticall
 `add dynamic position route and wire proofs and frontier`, `add journey page with import flow`,
 `replace stitch-hosted images with local assets`, `add playwright smoke suite`, progress/ticks,
 push.
+
+**Result:** built largely as planned, with two small additions the original task list didn't
+anticipate and one deliberate substitution. `apps/api` gained `GET /v1/positions` (recent list,
+backs the `/positions` index page) and `GET /v1/games/{id}` (a game's latest analysis, backs
+`/journey`'s per-game timeline) — Stage 5's route table had no "list" or "game" endpoints, and
+the web app needed both to do what this stage actually asks for. `@penumbra/core` was added as
+an `apps/web` dependency so the FEN→zobrist computation on `/board` and `/positions` reuses the
+exact backend algorithm instead of a second implementation or a widened API contract. The
+logo/avatar assets are hand-authored SVGs, not PNGs as literally named in the task list — same
+"locally hosted, no network dependency" goal, chosen because SVG is something reliably
+authorable as text.
+
+**Acceptance gate: passed (2026-07-11).** `pnpm --filter @penumbra/web build` succeeds (7 routes,
+static where expected); the Playwright suite is 10/10 against real running infra (`apps/api`,
+docker Postgres/Redis/minio, the analysis worker): all 7 routes render with a live WebGL context
+and zero console errors, the proofs page shows real published certs, a fresh never-seen FEN's fog
+score flips 202→200 in ~26s against the real canonical-tier worker, and importing the real
+account `DrNykterstein` returns 10 real games — one of which (already analyzed during Stage 4's
+own acceptance gate) renders its real 49-ply fog timeline. Also eyeballed directly in a real
+browser (not just the test suite): screenshots of `/`, `/board`, `/journey`, `/proofs`, and a
+`/positions/[zobrist]` detail page all confirm the locked design system renders correctly with
+real data and no text overflow. **The Playwright suite is not wired into `ci.yml`** — same call
+as Stage 4's own live acceptance gate: it needs a running worker and ~1GB of gitignored engine
+binaries that have no place in a GitHub Actions runner. Full account, including the API
+additions and the seed-dev-api-key.mjs script the `/journey` flow needed, is in `PROGRESS.md`'s
+M5 section and `HANDOFF.md`.
 
 ---
 

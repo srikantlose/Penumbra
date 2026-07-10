@@ -5,8 +5,8 @@
 This document tracks the implementation status of Penumbra Phase 1 (MVP). The work is organized by milestone and includes both completed components and next steps.
 
 **As of:** 2026-07-11  
-**Status:** Foundations + core systems verified end-to-end; PNS prover now emits forced-mate certificates that round-trip through the verifier; web skeleton up in the locked retro design system; hardening pass complete (verifier semantic verification, Polyglot zobrist, RFC 8785 hashing, real DB constraints, green CI); `services/analysis` (Stage 3, UCI orchestration worker) lands real Stockfish + Lc0 evals and fog scores in Postgres end-to-end; game import + analysis (Stage 4) passed its live acceptance gate; `apps/api` (Stage 5, M6's API half) now serves the public v1 API + BFF endpoints and writes the hash-chained proof ledger, also verified end-to-end against real infra — see `docs/ROADMAP.md` for the detailed forward plan through launch  
-**Commits shipped:** 48
+**Status:** Foundations + core systems verified end-to-end; PNS prover now emits forced-mate certificates that round-trip through the verifier; hardening pass complete (verifier semantic verification, Polyglot zobrist, RFC 8785 hashing, real DB constraints, green CI); `services/analysis` (Stage 3, UCI orchestration worker) lands real Stockfish + Lc0 evals and fog scores in Postgres end-to-end; game import + analysis (Stage 4) passed its live acceptance gate; `apps/api` (Stage 5, M6's API half) serves the public v1 API + BFF endpoints and writes the hash-chained proof ledger; `apps/web` (Stage 6) is now fully wired to that real API across all seven routes, including a new personal-journey page — all verified end-to-end against real infra, not just unit tests — see `docs/ROADMAP.md` for the detailed forward plan through launch  
+**Commits shipped:** 52
 
 ## Completed milestones
 
@@ -273,7 +273,7 @@ plausible cause for a stray native crash that no controlled test could
 reproduce. Not treated as a code bug; no fix applied beyond running the
 final verification pass with a Docker keep-alive guard.
 
-### M5: Web UI (positions, Frontier map)
+### ✅ M5: Web UI (positions, Frontier map) (complete, live-verified against real `apps/api`)
 
 **Scaffolded (2026-07-07):** `apps/web` stood up as a real workspace package — Next.js (App
 Router) + Tailwind, wired into `@penumbra/config`. Route skeleton only (`/`, `/board`, `/fog`,
@@ -355,9 +355,72 @@ in the locked design system:
   logo a `Link` back to `/`.
 - `PROOFS` and `METHODOLOGY` nav tabs now point at real routes instead of `#`.
 
-1. Replace both placeholder logo/avatar images with locally hosted assets
-2. Import any remaining specific Stitch screens if/when the user sends more (style reference only)
-3. Personal game journey plotting (M5 remainder)
+**Stage 6 — wired to the real API (2026-07-11):** all six pages now render live data from
+`apps/api` instead of hardcoded consts, plus a new personal-journey page. `docs/ROADMAP.md`
+Stage 6.
+
+- `src/lib/api.ts` — typed fetch helpers for every `apps/api` endpoint consumed. Server
+  components fetch directly (no client-side loading state needed); `/bff/import` is
+  server-only (reads `PENUMBRA_API_KEY`, a non-`NEXT_PUBLIC_` env var, so the key never
+  reaches the browser — only ever called from a Server Action).
+- `/` ← `GET /bff/stats`: real hero numbers (positions mapped, proofs published, ledger
+  height) and a real median-Fog gauge.
+- `/board` — the FEN input, fog poll, engine ladder, and archaeology list are now a client
+  component (`BoardAnalysis.tsx`) computing the zobrist client-side (`@penumbra/core`, added
+  as a new `apps/web` dependency, reusing the exact same Polyglot hash the backend uses rather
+  than inventing a second implementation or growing the API's response contract) and polling
+  `GET /v1/fog` with the server-given `retry_after_ms` backoff (`useFogPoll.ts`). The static
+  demo chessboard visualization and player headers are unchanged — rendering a real position
+  from FEN was out of scope. Reused real data honestly: `evals` rows have no stored move
+  notation (that lives in `game_positions`, tied to a game, not a bare position), so "Engine
+  Ladder" and "Archaeology List" show real per-fingerprint eval rows and real proof
+  references instead of fabricating move labels the API doesn't have.
+- `/positions` is now a search box (FEN or zobrist, computing the zobrist client-side same as
+  `/board`) + a real recently-seen list, and `/positions/[zobrist]` (new dynamic route) shows
+  a real position's provenance, fog, truth status, full append-only eval history, and proof
+  refs, 404-ing cleanly for an unknown zobrist.
+- `/frontier` ← `GET /bff/frontier`: the illustrative coastline SVG stays (per the roadmap),
+  but its four landmark labels now show real proven/total counts per piece-count band.
+- `/proofs` ← `GET /v1/proofs` + `GET /v1/ledger`: the real certificate table and hash chain,
+  with a working per-cert download link (presigned minio URL).
+- `/methodology` ← `GET /v1/meta/methodology`: real engine pins and both tier fingerprints;
+  the formulas and calibration percentile table stay static (the percentile table is itself a
+  fixed spec constant right now, not something the API recomputes). Added the
+  provisional-calibration label here and on `FogIndexCard` per the roadmap's explicit
+  instruction.
+- **`/journey` (new)** — username → `POST /bff/import` (a Next.js Server Action) → real
+  imported-game list → each game's real fog timeline (`GET /v1/games/{id}`, new endpoint, see
+  below) rendered through a `FogTimelineBar` component extracted so `/board`'s static demo
+  timeline and `/journey`'s real per-game timeline share the same markup, with a proof-entry
+  marker. Games with no `analyses` row yet (import doesn't trigger analysis — that's still a
+  separate CLI step per Stage 4) honestly show "not yet analyzed" instead of a fake timeline.
+  Live-verified end to end: imported 10 real games for `DrNykterstein`, and the one game
+  already analyzed during Stage 4's own acceptance gate (game id 7) rendered its real 49-ply
+  fog timeline correctly.
+- Two small, justified additions to `apps/api` (not in Stage 5's original route table):
+  `GET /v1/positions` (recent-list, backs the `/positions` index page) and
+  `GET /v1/games/{id}` (game + its latest `analyses` row, backs `/journey`'s timeline). Both
+  covered by existing conventions (zod schemas, same auth/rate-limit hooks).
+- Local B&W pixel-art assets replace both dead `lh3.googleusercontent.com` hotlinks: a
+  dithered crescent-moon logo and a generic avatar silhouette, both hand-authored SVGs (not
+  PNGs as the roadmap literally named — same "locally hosted, no network dependency" goal,
+  chosen because it's something reliably authorable as text rather than needing an image
+  generation dependency) built from a small pixel-grid generator script, not copied from
+  anywhere. The avatar now also fills `/board`'s two player-icon slots.
+- Deleted the dead `ScreenSlot.tsx` (no route had used it since the spec-built pages landed).
+- Playwright smoke suite (`apps/web/tests/*.spec.ts`, `playwright.config.ts`): all 7 routes
+  render with zero console errors and a live WebGL context (the `ShaderBackground` check);
+  proofs page shows ≥1 real cert; journey imports a real public Lichess account
+  (`DrNykterstein`) end to end; a genuine 202→200 fog round trip against a fresh, never-seen
+  FEN (26s against the real canonical-tier worker). **Not wired into `ci.yml`** — same call as
+  Stage 4's own live acceptance gate: it needs docker Postgres/Redis/minio, a running analysis
+  worker, fetched engine binaries (~1GB, gitignored), and a seeded dev API key
+  (`scripts/seed-dev-api-key.mjs`, new — key issuance has no public endpoint by design, so
+  this is the out-of-band local-dev provisioning step). Run by hand per the acceptance gate.
+- Live-verified visually too, not just via the test suite: booted the real dev server, drove
+  it with a headless-Chromium script, and eyeballed the actual screenshots (home, board,
+  journey) — the locked B&W 8-bit design system, the crescent logo, and the dithered gauge all
+  render correctly with real data.
 
 ### ✅ M6 (API half): `apps/api` (complete, live acceptance gate passed)
 
@@ -451,7 +514,7 @@ deploy. Both are launch-stage (`docs/ROADMAP.md` Stage 7), not blocking Stage 6'
 ```
 penumbra/
 ├─ apps/
-│  ├─ web/          # 🟡 Next.js + Tailwind, retro 8-bit design system locked; 6 routes built
+│  ├─ web/          # ✅ Next.js + Tailwind, retro 8-bit design system locked; 7 routes, all wired to live data
 │  └─ api/          # ✅ Fastify: public API v1, BFF endpoints, hash-chained ledger writer
 ├─ services/
 │  └─ analysis/     # ✅ UCI worker: Stockfish + Lc0 orchestration, fog computation, BullMQ queue
@@ -501,7 +564,8 @@ penumbra/
   against real Postgres (evals rows + 1 fog_scores row per run)
 - [x] M4: Import real Lichess game → analyze → fog timeline renders (5 real Lichess games
   imported, a 49-ply game analyzed end to end, `fog_timeline` populated)
-- [ ] M5: Position page shows provenance + eval history + fog
+- [x] M5: Position page shows provenance + eval history + fog (`/positions/[zobrist]`, live
+  against real imported/analyzed positions; Playwright suite green against real infra)
 - [x] M6 (API half): `/v1/fog?fen=...` returns 202 then score (confirmed via a real canonical-tier
   job draining to a `fog_scores` row); proofs published + ledger verified (`LEDGER OK (13
   entries)`)
@@ -551,9 +615,9 @@ in `docs/ROADMAP.md` — that file is the forward-looking plan; this section jus
 UCI orchestration worker) landing real Stockfish + Lc0 evals and fog scores in Postgres, verified
 end-to-end against real engine binaries and a real database, with `repro-test` confirming
 byte-identical reproducibility. Milestones M2 and M3 are both complete. Stage 4 (game import +
-analysis) and Stage 5 (`apps/api`, M6's API half) have both since shipped and passed their live
-acceptance gates — see their sections above. Next per `docs/ROADMAP.md` is Stage 6: wire the web
-app to this real API (typed fetch helpers, the `/board` fog-poll, dynamic position pages, a new
-`/journey` personal-game page, local logo/avatar assets, Playwright smoke tests). `docs/ROADMAP.md`
-has the full task-by-task plan through Stage 7 (launch) — treat it as the authoritative "what's
-next," not this section.
+analysis), Stage 5 (`apps/api`, M6's API half), and Stage 6 (wiring `apps/web` to that real API,
+plus the new `/journey` page) have all since shipped and passed their live acceptance gates — see
+their sections above. Next per `docs/ROADMAP.md` is Stage 7: launch (license split — has an
+ask-the-user checkpoint for the GPL finding — verifier crates.io release, GitHub release
+binaries, production deploy, methodology finalization). `docs/ROADMAP.md` has the full
+task-by-task plan for it — treat it as the authoritative "what's next," not this section.
