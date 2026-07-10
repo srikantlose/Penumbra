@@ -4,7 +4,13 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { schema, isPositionProven } from '@penumbra/db';
 import { computeFingerprintForTier } from '@penumbra/analysis';
 import { FOG_FORMULA_VERSION, type FogComponents } from '@penumbra/fog';
-import { zobristParamSchema, positionResponseSchema, errorResponseSchema } from '../schemas.js';
+import {
+  zobristParamSchema,
+  positionResponseSchema,
+  errorResponseSchema,
+  recentPositionsQuerySchema,
+  recentPositionsResponseSchema,
+} from '../schemas.js';
 import { type ApiContext, PUBLIC_FOG_TIER } from '../context.js';
 
 // positions.zobrist is stored as zobristToHexString()'s output: '0x' + 16
@@ -16,7 +22,31 @@ function normalizeZobrist(raw: string): string {
 }
 
 export async function registerPositionsRoutes(fastify: FastifyInstance, context: ApiContext): Promise<void> {
-  fastify.withTypeProvider<ZodTypeProvider>().get(
+  const app = fastify.withTypeProvider<ZodTypeProvider>();
+
+  // Backs /positions' "recent list" (apps/web, Stage 6) -- not in the
+  // original Stage 5 route table, added because the web app needs somewhere
+  // to discover a zobrist to look up without already having one.
+  app.get(
+    '/v1/positions',
+    { schema: { querystring: recentPositionsQuerySchema, response: { 200: recentPositionsResponseSchema } } },
+    async (request) => {
+      const rows = await context.db
+        .select({
+          epd: schema.positions.epd,
+          zobrist: schema.positions.zobrist,
+          pieceCount: schema.positions.pieceCount,
+          createdAt: schema.positions.createdAt,
+        })
+        .from(schema.positions)
+        .orderBy(desc(schema.positions.createdAt))
+        .limit(request.query.limit);
+
+      return { positions: rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() })) };
+    }
+  );
+
+  app.get(
     '/v1/positions/:zobrist',
     {
       schema: {

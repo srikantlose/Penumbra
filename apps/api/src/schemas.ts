@@ -94,6 +94,46 @@ export const positionResponseSchema = z.object({
   proofRefs: z.array(proofRefSchema),
 });
 
+export const recentPositionsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export const recentPositionSchema = z.object({
+  epd: z.string(),
+  zobrist: z.string(),
+  pieceCount: z.number(),
+  createdAt: z.string(),
+});
+
+export const recentPositionsResponseSchema = z.object({
+  positions: z.array(recentPositionSchema),
+});
+
+export const gameIdParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
+export const gameAnalysisSchema = z.object({
+  id: z.number(),
+  tier: z.string(),
+  status: z.string(),
+  fogTimeline: z.unknown(),
+  proofEntryPly: z.number().nullable(),
+  missedProofs: z.unknown(),
+  completedAt: z.string().nullable(),
+});
+
+export const gameResponseSchema = z.object({
+  id: z.number(),
+  source: z.string(),
+  sourceGameId: z.string().nullable(),
+  white: z.string().nullable(),
+  black: z.string().nullable(),
+  result: z.string().nullable(),
+  importedAt: z.string(),
+  analysis: gameAnalysisSchema.nullable(),
+});
+
 export const proofListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   offset: z.coerce.number().int().min(0).default(0),
