@@ -29,7 +29,9 @@
     "db:studio": "drizzle-kit studio",
     "db:smoke": "node scripts/db-smoke.mjs",
     "fetch:syzygy": "node scripts/fetch-syzygy.mjs",
-    "fetch:engines": "node scripts/fetch-engines.mjs"
+    "fetch:engines": "node scripts/fetch-engines.mjs",
+    "ledger:publish": "node scripts/publish-proofs.mjs",
+    "ledger:verify": "node scripts/verify-ledger.mjs"
   },
   "dependencies": {
     "drizzle-orm": "^0.33.0"

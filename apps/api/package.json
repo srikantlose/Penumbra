@@ -1,0 +1,36 @@
+{
+  "name": "@penumbra/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Public v1 API + BFF endpoints for the web app, plus the hash-chained proof ledger writer",
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist",
+    "dev": "node dist/server.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.0",
+    "@fastify/rate-limit": "^10.0.0",
+    "@penumbra/analysis": "workspace:*",
+    "@penumbra/cert-schema": "workspace:*",
+    "@penumbra/core": "workspace:*",
+    "@penumbra/db": "workspace:*",
+    "@penumbra/fog": "workspace:*",
+    "bullmq": "^5.0.0",
+    "drizzle-orm": "^0.33.0",
+    "fastify": "^5.0.0",
+    "fastify-type-provider-zod": "^4.0.0",
+    "ioredis": "^5.0.0",
+    "minio": "^8.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@penumbra/config": "workspace:*",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  }
+}
