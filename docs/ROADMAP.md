@@ -124,12 +124,12 @@ Node ≥18 (CI uses 20 after Stage 1.5), pnpm 9.15.0 (`packageManager` field), R
 
 | Stage | Milestone | Content | Status |
 |---|---|---|---|
-| 0 | — | commit web/stitch streams, this file, push | done when this file is committed |
-| 1 | hardening | verifier semantics, Polyglot zobrist, RFC 8785, DB fixes, CI | pending |
-| 2 | M2 remainder | Syzygy probing, `at_least_draw` fortress certs, ~10 seeds | pending |
-| 3 | M3 remainder | `services/analysis`: UCI orchestration, fog pipeline | pending |
-| 4 | M4 | Lichess import, PGN extraction, game analysis, truth labeling | pending |
-| 5 | M6 (API part, pulled early) | `apps/api` Fastify public v1 + BFF + ledger writer | pending |
+| 0 | — | commit web/stitch streams, this file, push | done |
+| 1 | hardening | verifier semantics, Polyglot zobrist, RFC 8785, DB fixes, CI | done |
+| 2 | M2 remainder | Syzygy probing, `at_least_draw` fortress certs, ~10 seeds | done |
+| 3 | M3 remainder | `services/analysis`: UCI orchestration, fog pipeline | done |
+| 4 | M4 | Lichess import, PGN extraction, game analysis, truth labeling | done |
+| 5 | M6 (API part, pulled early) | `apps/api` Fastify public v1 + BFF + ledger writer | done |
 | 6 | M5 remainder | wire web to live data, journey page, assets, smoke tests | pending |
 | 7 | M6 (launch part) | license split, crates.io, releases, deploy, methodology final | pending |
 
@@ -1060,15 +1060,15 @@ Runs before web wiring because Stage 6 consumes it.
 
 **Tasks:**
 
-- [ ] `src/server.ts` (build + listen :3001, zod type provider, CORS for `localhost:3000`),
+- [x] `src/server.ts` (build + listen :3001, zod type provider, CORS for `localhost:3000`),
   `src/schemas.ts` (zod for every request/response — the response schemas are the API contract,
   keep them in one file).
-- [ ] `src/plugins/auth.ts`: `X-API-Key` → sha256 → `api_keys` lookup (`key_hash`); anonymous
+- [x] `src/plugins/auth.ts`: `X-API-Key` → sha256 → `api_keys` lookup (`key_hash`); anonymous
   requests allowed on GET routes with the per-IP limiter. Key format `pnb_` + 32 random bytes
   hex; store only the sha256.
-- [ ] `src/plugins/rateLimit.ts`: `@fastify/rate-limit` with redis store — per-key
+- [x] `src/plugins/rateLimit.ts`: `@fastify/rate-limit` with redis store — per-key
   `api_keys.rate_limit`/min when authenticated, 60/min per-IP anonymous; 429 with retry-after.
-- [ ] `src/ledger.ts` — the hash chain writer (also documented as a spec addendum in
+- [x] `src/ledger.ts` — the hash chain writer (also documented as a spec addendum in
   `docs/CERTIFICATE_FORMAT.md` §Ledger):
   `entry_hash = '0x' + sha256( bytes(prev_hash_hex_decoded) || sha256(canonicalizeJSON(payload)) )`;
   genesis `prev_hash = '0x' + '00'.repeat(32)`. Single-writer: `SELECT seq FROM ledger_entries
@@ -1076,11 +1076,11 @@ Runs before web wiring because Stage 6 consumes it.
   `publishProof(proofRow, certJson)`: upload cert to minio bucket `proofs` (object key
   `certs/<sha256>.pnbcert`), insert `proofs` row (status `published`), append ledger entry
   `{type:"proof_published", proof_sha256, claim, epd, published_at}`.
-- [ ] `scripts/publish-proofs.mjs` — publishes the committed example + fortress certs through
+- [x] `scripts/publish-proofs.mjs` — publishes the committed example + fortress certs through
   `publishProof` (idempotent on `certificate_sha256` unique index).
-- [ ] `scripts/verify-ledger.mjs` — walks the chain, recomputes every hash, prints
+- [x] `scripts/verify-ledger.mjs` — walks the chain, recomputes every hash, prints
   `LEDGER OK (n entries)` or the first broken seq.
-- [ ] Tests: `fastify.inject()` integration tests against docker Postgres/Redis (fog 200/202
+- [x] Tests: `fastify.inject()` integration tests against docker Postgres/Redis (fog 200/202
   path with a mocked queue, positions detail, ledger chain validity, 429 rate-limit, api-key
   auth); ledger unit test with fixed payloads.
 
@@ -1103,6 +1103,26 @@ compat table in each plugin's README before downgrading anything.
 **Commit plan:** `scaffold fastify api with zod schemas and rate limiting`,
 `add fog and positions endpoints with 202 queue pattern`,
 `add proof publishing and hash chained ledger`, `add bff endpoints for web`, progress/ticks, push.
+
+**Result:** built and committed largely as planned, with two additions the original task list
+didn't anticipate. `@penumbra/analysis` had to be added as a workspace dependency (not just the
+`{db,core,fog,cert-schema,config}` this section lists) — the fog enqueue path, methodology
+fingerprints, and `/bff/import` all need helpers that only live in that package. The `minio` JS
+client was added too; the task list specifies minio as the object store but doesn't name a
+library. `FOG_WEIGHTS` was extracted as a named export from `packages/fog/src/formula.ts`
+(previously inline literals) so the methodology endpoint reports the exact weights in use instead
+of a second, driftable copy — a small, justified refactor, not scope creep.
+
+**Acceptance gate: passed (2026-07-11).** Real docker Postgres/Redis/minio, real Stage 4 engine
+binaries. `pnpm --filter @penumbra/api test` → 18/18 (`fastify.inject()` integration tests against
+live infra, `ledger.test.ts`'s fixed-payload unit tests); `node dist/server.js` on `:3001`;
+`node scripts/publish-proofs.mjs` → all 13 example/fortress certs published (idempotent on
+re-run); `curl /v1/fog?fen=<startpos>` → 202 first, confirmed 200 with a real computed score
+(`fog_scores` row: score 47, percentile 53) once the canonical-tier worker drained the job;
+`curl /v1/proofs` → real published certs; `node scripts/verify-ledger.mjs` → `LEDGER OK (13
+entries)`. Full account, including the public-tier choice (canonical, not quick) and the
+synchronous-for-v1 call on `/bff/import`, is in `PROGRESS.md`'s M6 (API half) section and
+`HANDOFF.md`.
 
 ---
 

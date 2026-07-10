@@ -4,9 +4,9 @@
 
 This document tracks the implementation status of Penumbra Phase 1 (MVP). The work is organized by milestone and includes both completed components and next steps.
 
-**As of:** 2026-07-09  
-**Status:** Foundations + core systems verified end-to-end; PNS prover now emits forced-mate certificates that round-trip through the verifier; web skeleton up in the locked retro design system; hardening pass complete (verifier semantic verification, Polyglot zobrist, RFC 8785 hashing, real DB constraints, green CI); `services/analysis` (Stage 3, UCI orchestration worker) now lands real Stockfish + Lc0 evals and fog scores in Postgres end-to-end — see `docs/ROADMAP.md` for the detailed forward plan through launch  
-**Commits shipped:** 23
+**As of:** 2026-07-11  
+**Status:** Foundations + core systems verified end-to-end; PNS prover now emits forced-mate certificates that round-trip through the verifier; web skeleton up in the locked retro design system; hardening pass complete (verifier semantic verification, Polyglot zobrist, RFC 8785 hashing, real DB constraints, green CI); `services/analysis` (Stage 3, UCI orchestration worker) lands real Stockfish + Lc0 evals and fog scores in Postgres end-to-end; game import + analysis (Stage 4) passed its live acceptance gate; `apps/api` (Stage 5, M6's API half) now serves the public v1 API + BFF endpoints and writes the hash-chained proof ledger, also verified end-to-end against real infra — see `docs/ROADMAP.md` for the detailed forward plan through launch  
+**Commits shipped:** 24
 
 ## Completed milestones
 
@@ -359,13 +359,92 @@ in the locked design system:
 2. Import any remaining specific Stitch screens if/when the user sends more (style reference only)
 3. Personal game journey plotting (M5 remainder)
 
-### M6: API + launch
+### ✅ M6 (API half): `apps/api` (complete, live acceptance gate passed)
 
-1. Public API v1 (fog, positions, proofs, ledger)
-2. Rate limiting + API keys
-3. Methodology pages + docs
-4. Verifier binary release (crates.io + GitHub releases)
-5. Deploy to production
+**Objective:** the public v1 API + BFF endpoints the web app needs, plus the hash-chained proof
+ledger writer (`docs/ROADMAP.md` Stage 5, pulled ahead of the M5 web-wiring remainder because
+Stage 6 consumes it).
+
+**Delivered (2026-07-11):**
+- `src/server.ts` — Fastify 5 + `fastify-type-provider-zod`, CORS scoped to the web origin,
+  listens on `:3001`. `buildServer(context)` is importable standalone (no side effects), with the
+  real `listen()` call guarded behind an is-main-module check so the test suite can boot the app
+  without opening a socket.
+- `src/schemas.ts` — every request/response as a zod schema in one file (the API contract).
+- `src/plugins/auth.ts` — `X-API-Key` → sha256 → `api_keys.key_hash` lookup as a global
+  `onRequest` hook; a present-but-invalid/revoked key 401s immediately, a missing key passes
+  through anonymously, and `requireApiKey` gates the one mutating route.
+- `src/plugins/rateLimit.ts` — `@fastify/rate-limit` with a Redis store: per-key
+  `api_keys.rate_limit`/min when authenticated, 60/min per-IP anonymous, ordered after the auth
+  hook so the bucket key reflects `request.apiKey`.
+- `src/routes/fog.ts` — `GET /v1/fog` and `POST /v1/fog/batch`: latest **canonical**-tier
+  `fog_scores` hit → 200 (truth status re-derived live via `deriveTruthStatus`, not trusted from
+  the stored row, so a proof published after the score was cached still reports PROVEN); miss →
+  enqueues onto the same `analyze-position-canonical` BullMQ queue and idempotent jobId Stage 4
+  built, returns 202. (Public tier choice logged below.)
+- `src/routes/positions.ts` — `GET /v1/positions/:zobrist`: position + provenance + full
+  append-only eval history + latest fog + proof refs + live truth status.
+- `src/ledger.ts` — the hash chain: `entry_hash = '0x' + sha256(prev_hash_bytes ||
+  sha256(canonicalizeJSON(payload)))`, genesis `'0x' + '00'.repeat(32)`, tail row locked via
+  `SELECT ... FOR UPDATE` inside a transaction (single-writer, per spec). `publishProof()` uploads
+  the cert to minio (`proofs` bucket, `certs/<sha256>.pnbcert`), inserts the `proofs` row, and
+  appends the ledger entry inside one shared transaction (a crash between the two can't leave a
+  published-but-unledgered proof) — idempotent on `certificate_sha256`'s unique index.
+- `src/routes/proofs.ts` / `routes/ledger.ts` — list/detail with presigned minio download URLs
+  (signed locally, no network round trip), `since_seq`-filtered ascending ledger reads.
+- `src/routes/bff.ts` — `/bff/stats`, `/bff/frontier` (aggregated by piece count, "proven"
+  matching `deriveTruthStatus` exactly — a proof row, or a cached tablebase probe within
+  `SYZYGY_MAX_PIECES`), and `/bff/import` (API-key gated, reuses Stage 4's `importGame`/
+  `streamUserGames` synchronously — see decisions below).
+- `src/routes/meta.ts` — `GET /v1/meta/methodology`: formula version, weights, engine pins, both
+  tier fingerprints, and the `provisional-placeholder` calibration label.
+- `scripts/publish-proofs.mjs` / `scripts/verify-ledger.mjs` (root-level, alongside
+  `scripts/db-smoke.mjs`) — publish every committed example + fortress cert
+  (`rust/prover/examples/`, upserting each one's position row since they're synthetic prover
+  fixtures, not positions from a real import) and walk the whole chain recomputing every hash.
+- Tests: `src/ledger.test.ts` (pure, fixed-payload unit tests — determinism, payload/prevHash
+  sensitivity, JCS key-order insensitivity) + `src/server.test.ts` (18 `fastify.inject()`
+  integration tests against the real docker Postgres/Redis: fog 200/202 with a mocked BullMQ
+  queue, positions detail, proof publishing + full ledger-chain verification, 401 auth paths, and
+  a real 429 once the anonymous rate limit is exceeded).
+
+**Live acceptance gate (2026-07-11):** real docker Postgres/Redis/minio, `pnpm --filter
+@penumbra/api build && node dist/server.js` on `:3001`. `curl /v1/fog?fen=<startpos>` → 202,
+confirmed real 200 with a computed score once the Stage 4 worker drained the canonical-tier job
+(`fog_scores` row: score 47, percentile 53). `node scripts/publish-proofs.mjs` → all 13 example
+certs published (idempotent on re-run); `node scripts/verify-ledger.mjs` → `LEDGER OK (13
+entries)`; `curl /v1/proofs`, `/v1/ledger`, `/bff/stats`, `/bff/frontier` all returned real data
+from the existing 445+ imported positions.
+
+**Decisions made autonomously this session (see `HANDOFF.md` for full rationale):**
+- **The public API reads/enqueues the canonical tier, never quick** — quick is Stage 4's internal
+  game-analysis speed tier; a public Fog Index lookup should always resolve to the deep,
+  authoritative score. The roadmap's route table didn't specify which tier.
+- **`@penumbra/analysis` added as a workspace dependency**, not just the roadmap's listed
+  `{db,core,fog,cert-schema,config}` — the fog enqueue path, methodology fingerprints, and
+  `/bff/import` all need helpers that only live there (`enqueueAnalyzePosition`,
+  `computeFingerprintForTier`, `streamUserGames`, `importGame`).
+- **`minio` (the official JS client)** added for the object storage the roadmap's ledger spec
+  requires but didn't name a library for.
+- **`/bff/import` runs synchronously** (bounded by `max`, default 20/cap 100) rather than behind a
+  new background job queue — reuses Stage 4's proven `importGame` path as-is. Stage 6's `/journey`
+  page wants a "progress" UX during import; if real usage shows this blocking too long, that's the
+  point to add a background queue, not before.
+- **Certificate claim `value`/`bound` mapping:** a cert's `'win'` claim → `proofs.value='win'`,
+  `bound=null`; `'at_least_draw'` → `value='draw'`, `bound='at_least_draw'` (matches the schema's
+  own column comments and every fortress example cert).
+- **`FOG_WEIGHTS` extracted as a named export** from `packages/fog/src/formula.ts` (previously
+  inline literals in `computeFogScore`) so `/v1/meta/methodology` reports the exact weights in use
+  instead of a second, driftable copy.
+- **Tests run against the real docker Postgres/Redis, not a disposable test database** (this repo
+  has none) — synthetic, unique-per-fixture FENs avoid colliding with real imported data, and the
+  handful of resulting rows are an accepted permanent fixture in local dev, same as running
+  `publish-proofs.mjs` by hand. One follow-on fix this surfaced: `@fastify/rate-limit`'s Redis
+  store persists across process restarts, so the test suite flushes its own `fastify-rate-limit-*`
+  keys in `beforeAll` to stay isolated from a previous run's counter.
+
+**Remaining for M6 in full:** verifier binary release (crates.io + GitHub releases), production
+deploy. Both are launch-stage (`docs/ROADMAP.md` Stage 7), not blocking Stage 6's web wiring.
 
 ## Architecture overview
 
@@ -373,7 +452,7 @@ in the locked design system:
 penumbra/
 ├─ apps/
 │  ├─ web/          # 🟡 Next.js + Tailwind, retro 8-bit design system locked; 6 routes built
-│  └─ api/          # Fastify: public API v1, BFF (TBD)
+│  └─ api/          # ✅ Fastify: public API v1, BFF endpoints, hash-chained ledger writer
 ├─ services/
 │  └─ analysis/     # ✅ UCI worker: Stockfish + Lc0 orchestration, fog computation, BullMQ queue
 ├─ packages/
@@ -420,9 +499,13 @@ penumbra/
 - [x] M3: Fog reproducibility test (same FEN twice → byte-identical score) — `repro-test`
   (quick tier) against real Stockfish + Lc0, 3 fixed positions, REPRO OK; `analyze` CLI verified
   against real Postgres (evals rows + 1 fog_scores row per run)
-- [ ] M4: Import real Lichess game → analyze → fog timeline renders
+- [x] M4: Import real Lichess game → analyze → fog timeline renders (5 real Lichess games
+  imported, a 49-ply game analyzed end to end, `fog_timeline` populated)
 - [ ] M5: Position page shows provenance + eval history + fog
-- [ ] M6: `/v1/fog?fen=...` returns 202 then score; verifier binary available on crates.io
+- [x] M6 (API half): `/v1/fog?fen=...` returns 202 then score (confirmed via a real canonical-tier
+  job draining to a `fog_scores` row); proofs published + ledger verified (`LEDGER OK (13
+  entries)`)
+- [ ] M6 (remainder): verifier binary available on crates.io
 
 Full per-stage task lists, exact commands, and acceptance gates for everything still open live
 in `docs/ROADMAP.md` — that file is the forward-looking plan; this section just tracks status.
@@ -467,7 +550,10 @@ in `docs/ROADMAP.md` — that file is the forward-looking plan; this section jus
 `at_least_draw` proofs, 10 committed fortress certs), and now Stage 3 (`services/analysis`, the
 UCI orchestration worker) landing real Stockfish + Lc0 evals and fog scores in Postgres, verified
 end-to-end against real engine binaries and a real database, with `repro-test` confirming
-byte-identical reproducibility. Milestones M2 and M3 are both complete. Next per `docs/ROADMAP.md`
-is Stage 4: game import + analysis (Lichess OAuth, PGN parsing, fog timeline, two-tier truth
-labeling). `docs/ROADMAP.md` has the full task-by-task plan through Stage 7 (launch) — treat it as
-the authoritative "what's next," not this section.
+byte-identical reproducibility. Milestones M2 and M3 are both complete. Stage 4 (game import +
+analysis) and Stage 5 (`apps/api`, M6's API half) have both since shipped and passed their live
+acceptance gates — see their sections above. Next per `docs/ROADMAP.md` is Stage 6: wire the web
+app to this real API (typed fetch helpers, the `/board` fog-poll, dynamic position pages, a new
+`/journey` personal-game page, local logo/avatar assets, Playwright smoke tests). `docs/ROADMAP.md`
+has the full task-by-task plan through Stage 7 (launch) — treat it as the authoritative "what's
+next," not this section.
