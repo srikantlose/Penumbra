@@ -4,6 +4,7 @@ export {
   computeFogIndex,
   winProbability,
   FOG_FORMULA_VERSION,
+  FOG_WEIGHTS,
   type EngineEvals,
   type FogComponents,
   type FogComputeOptions,

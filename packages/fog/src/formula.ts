@@ -114,12 +114,22 @@ export function computeFogComponents(
   };
 }
 
+// Exported so the methodology endpoint (apps/api) can report the exact
+// weights in use instead of duplicating them as a second set of literals
+// that could drift out of sync with the formula below.
+export const FOG_WEIGHTS = {
+  disagreement: 0.3,
+  depthVolatility: 0.25,
+  moveCriticality: 0.25,
+  tablebaseDistance: 0.2,
+} as const;
+
 export function computeFogScore(components: FogComponents): number {
   const weighted =
-    0.3 * components.disagreement +
-    0.25 * components.depthVolatility +
-    0.25 * components.moveCriticality +
-    0.2 * components.tablebaseDistance;
+    FOG_WEIGHTS.disagreement * components.disagreement +
+    FOG_WEIGHTS.depthVolatility * components.depthVolatility +
+    FOG_WEIGHTS.moveCriticality * components.moveCriticality +
+    FOG_WEIGHTS.tablebaseDistance * components.tablebaseDistance;
 
   const final = components.proofGate * weighted;
   return Math.round(100 * final);
