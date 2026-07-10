@@ -1,3 +1,5 @@
+import { fetchMethodology } from '@/lib/api';
+
 const COMPONENTS = [
   {
     name: 'Disagreement (d)',
@@ -31,7 +33,9 @@ const PERCENTILES = [
   ['50th (median)', 45], ['75th', 62], ['90th', 78], ['95th', 87], ['99th', 94],
 ] as const;
 
-export default function MethodologyPage() {
+export default async function MethodologyPage() {
+  const methodology = await fetchMethodology();
+
   return (
     <main className="relative z-10 pt-24 pb-16 px-gutter flex flex-col max-w-[1440px] mx-auto w-full gap-8">
       <div className="border-[2px] border-white bg-black/80 backdrop-blur-md p-6">
@@ -64,11 +68,47 @@ export default function MethodologyPage() {
         ))}
       </div>
 
+      {/* Engine pins */}
+      <div className="border-[2px] border-white bg-black/80 backdrop-blur-md flex flex-col">
+        <div className="p-4 border-b-[2px] border-white flex justify-between items-center">
+          <span className="font-label-caps text-label-caps text-white uppercase">
+            Fog Index v{methodology.formulaVersion} — Engine Pins
+          </span>
+        </div>
+        <div className="p-4 flex flex-col gap-2 font-data-mono text-data-mono uppercase text-white">
+          <div className="flex justify-between gap-2 flex-wrap">
+            <span>Stockfish:</span>
+            <span>
+              {methodology.engines.stockfish.version} · {methodology.engines.stockfish.nnue}
+            </span>
+          </div>
+          <div className="flex justify-between gap-2 flex-wrap">
+            <span>Lc0:</span>
+            <span>
+              {methodology.engines.lc0.version} · {methodology.engines.lc0.network} ·{' '}
+              {methodology.engines.lc0.backend} · {methodology.engines.lc0.nodes} nodes
+            </span>
+          </div>
+          <div className="flex justify-between gap-2 flex-wrap border-t-[2px] border-white pt-2 mt-2">
+            <span>Quick fingerprint:</span>
+            <span>{methodology.fingerprints.quick}</span>
+          </div>
+          <div className="flex justify-between gap-2 flex-wrap">
+            <span>Canonical fingerprint:</span>
+            <span>{methodology.fingerprints.canonical}</span>
+          </div>
+        </div>
+      </div>
+
       {/* Calibration */}
       <div className="border-[2px] border-white bg-black/80 backdrop-blur-md flex flex-col">
-        <div className="p-4 border-b-[2px] border-white">
+        <div className="p-4 border-b-[2px] border-white flex flex-col gap-1">
           <span className="font-label-caps text-label-caps text-white uppercase">
-            Calibration CDF — 100k position corpus (Lichess elite, plies 10–80)
+            Calibration CDF — {methodology.calibration.corpusSize.toLocaleString()} position corpus
+            (Lichess elite, plies 10–80)
+          </span>
+          <span className="font-data-mono text-[10px] text-white uppercase">
+            Percentiles are provisional pending the 100k-corpus calibration.
           </span>
         </div>
         <div className="p-4 overflow-x-auto">

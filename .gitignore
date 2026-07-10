@@ -28,6 +28,11 @@ CLAUDE.md
 .turbo/
 .pnpm-store/
 
+# Playwright output (apps/web)
+test-results/
+playwright-report/
+blob-report/
+
 # Vendored third-party MCP servers (not part of this project; rebuilt locally, not committed)
 tools/
 

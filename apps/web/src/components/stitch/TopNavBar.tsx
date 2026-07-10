@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { label: 'MAP', href: '/frontier' },
   { label: 'PROOFS', href: '/proofs' },
   { label: 'ANALYSIS', href: '/board' },
+  { label: 'JOURNEY', href: '/journey' },
   { label: 'METHODOLOGY', href: '/methodology' },
 ];
 
@@ -16,11 +17,7 @@ export function TopNavBar() {
   return (
     <nav className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-gutter h-16 bg-black/80 backdrop-blur-md border-b-[2px] border-white">
       <Link className="flex items-center gap-4" href="/">
-        <img
-          alt="Logo"
-          className="h-8 w-8 object-contain rounded-none grayscale contrast-200 brightness-200"
-          src="https://lh3.googleusercontent.com/aida/AP1WRLsmarowsYQ9YSSwBze-l4e_6_vDQ8Ss33Q0vgIxJabtTsvnqw8siBtYthAgnkgpu0BIJ_hgJ3WEmF77xHOrymukLwsOmB_LZ8YNs0fYLni_8HKCyrq1TXmDAbO6hM5Wjrf2egHwkqMdjh7XPcpNa4ou5x_4qZG4ckMfc-MbkeHl8cT0z_DVJyTtIaQ87qXUikKiT4MrUmegGF5MdqITCdx3g41485FhBsp6QbTWs9BQPhXdPEFqYME9CA"
-        />
+        <img alt="Penumbra logo" className="h-8 w-8 object-contain rounded-none" src="/logo.svg" />
         <span className="font-headline-sm text-headline-sm tracking-tighter text-white">
           PENUMBRA
         </span>

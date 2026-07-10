@@ -1,8 +1,11 @@
 import { FrontierCanvas } from '@/components/stitch/FrontierCanvas';
+import { fetchBffFrontier, type FrontierBand } from '@/lib/api';
 
 // A jagged, hand-drawn-looking coastline boundary (sharp segments, no curves —
 // matches the 8-bit aesthetic). Points trace the "known" frontier at y; the
 // proven region is everything above this line, the fog everything below.
+// The shape itself stays illustrative (docs/ROADMAP.md Stage 6: "SVG stays");
+// only the landmark counts below it are real data.
 const VIEW_W = 1000;
 const VIEW_H = 420;
 const COASTLINE: [number, number][] = [
@@ -15,17 +18,31 @@ const coastlinePoints = COASTLINE.map(([x, y]) => `${x},${y}`).join(' ');
 const provenPolygon = `0,0 ${coastlinePoints} ${VIEW_W},0`;
 const fogPolygon = `0,${VIEW_H} ${coastlinePoints} ${VIEW_W},${VIEW_H}`;
 
-// Landmark positions plotted along the frontier — piece count drives the
-// Fog Index's tablebase-distance component (t = clamp((n-7)/9, 0, 1)), so the
-// 7-piece boundary is the literal frontier this map visualizes.
+// Fixed conceptual anchors along the frontier — piece count drives the Fog
+// Index's tablebase-distance component (t = clamp((n-7)/9, 0, 1)), so the
+// 7-piece boundary is the literal frontier this map visualizes. Real counts
+// are looked up from GET /bff/frontier at render time.
 const LANDMARKS = [
-  { x: 140, label: 'KPvK · 3pc', note: 'PROVEN' },
-  { x: 350, label: 'KRvKB · 4pc', note: 'PROVEN' },
-  { x: 560, label: '7-MAN BOUNDARY', note: 'PROVEN' },
-  { x: 840, label: 'OPEN RESEARCH', note: 'EVALUATED' },
-];
+  { x: 140, label: 'KPvK · 3pc', pieceCount: 3 },
+  { x: 350, label: 'KRvKB · 4pc', pieceCount: 4 },
+  { x: 560, label: '7-MAN BOUNDARY', pieceCount: 7 },
+  { x: 840, label: 'OPEN RESEARCH · 17+pc', pieceCount: null },
+] as const;
 
-export default function FrontierPage() {
+function summarizeOpenResearch(bands: FrontierBand[]) {
+  return bands
+    .filter((b) => b.pieceCount >= 17)
+    .reduce((acc, b) => ({ positions: acc.positions + b.positions, proven: acc.proven + b.proven }), {
+      positions: 0,
+      proven: 0,
+    });
+}
+
+export default async function FrontierPage() {
+  const { bands } = await fetchBffFrontier();
+  const byPieceCount = new Map(bands.map((b) => [b.pieceCount, b]));
+  const openResearch = summarizeOpenResearch(bands);
+
   return (
     <main className="relative z-10 pt-24 pb-16 px-gutter flex flex-col max-w-[1440px] mx-auto w-full gap-8">
       <div className="border-[2px] border-white bg-black/80 backdrop-blur-md p-6">
@@ -57,17 +74,25 @@ export default function FrontierPage() {
             })}
           </svg>
           <FrontierCanvas className="absolute inset-0 h-full w-full" />
-          {LANDMARKS.map((mark) => (
-            <div
-              key={mark.label}
-              className="absolute flex flex-col items-center gap-1"
-              style={{ left: `${(mark.x / VIEW_W) * 100}%`, top: '58%', transform: 'translateX(-50%)' }}
-            >
-              <span className="font-data-mono text-[10px] bg-black/80 backdrop-blur-md border border-white px-1 text-white whitespace-nowrap">
-                {mark.label}
-              </span>
-            </div>
-          ))}
+          {LANDMARKS.map((mark) => {
+            const band = mark.pieceCount === null ? null : byPieceCount.get(mark.pieceCount);
+            const positions = mark.pieceCount === null ? openResearch.positions : band?.positions ?? 0;
+            const proven = mark.pieceCount === null ? openResearch.proven : band?.proven ?? 0;
+            return (
+              <div
+                key={mark.label}
+                className="absolute flex flex-col items-center gap-1"
+                style={{ left: `${(mark.x / VIEW_W) * 100}%`, top: '58%', transform: 'translateX(-50%)' }}
+              >
+                <span className="font-data-mono text-[10px] bg-black/80 backdrop-blur-md border border-white px-1 text-white whitespace-nowrap">
+                  {mark.label}
+                </span>
+                <span className="font-data-mono text-[10px] bg-black/80 backdrop-blur-md border border-white px-1 text-white whitespace-nowrap">
+                  {proven}/{positions} proven
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 

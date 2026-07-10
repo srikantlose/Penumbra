@@ -1,14 +1,15 @@
-export default function HomePage() {
+import { fetchBffStats } from '@/lib/api';
+
+export default async function HomePage() {
+  const stats = await fetchBffStats();
+  const gaugePercent = stats.medianFog === null ? null : Math.min(100, Math.max(0, stats.medianFog));
+
   return (
     <main className="flex-1 relative z-10 pt-24 pb-16 px-gutter flex flex-col max-w-[1440px] mx-auto w-full gap-16">
       {/* Hero Section */}
       <section className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-12 pt-12">
         <div className="flex flex-col gap-6 max-w-2xl border-[2px] border-white p-6 bg-black/80 backdrop-blur-md">
-          <img
-            alt="RetroByte Studios Logo"
-            className="w-16 h-16 object-contain rounded-none grayscale contrast-200 brightness-200"
-            src="https://lh3.googleusercontent.com/aida/AP1WRLsmarowsYQ9YSSwBze-l4e_6_vDQ8Ss33Q0vgIxJabtTsvnqw8siBtYthAgnkgpu0BIJ_hgJ3WEmF77xHOrymukLwsOmB_LZ8YNs0fYLni_8HKCyrq1TXmDAbO6hM5Wjrf2egHwkqMdjh7XPcpNa4ou5x_4qZG4ckMfc-MbkeHl8cT0z_DVJyTtIaQ87qXUikKiT4MrUmegGF5MdqITCdx3g41485FhBsp6QbTWs9BQPhXdPEFqYME9CA"
-          />
+          <img alt="Penumbra logo" className="w-16 h-16 object-contain rounded-none" src="/logo.svg" />
           <h1 className="font-display-lg text-display-lg text-white uppercase">
             The Unsolved Frontier of Chess
           </h1>
@@ -16,6 +17,15 @@ export default function HomePage() {
             A cryptographic and engineering challenge mapping the boundary between the proven and
             the evaluated. Explore the measurable murkiness of deep analysis.
           </p>
+          <div className="flex flex-wrap gap-4 pt-2 font-data-mono text-data-mono text-white uppercase">
+            <span className="border-[2px] border-white px-3 py-2">
+              {stats.positions.toLocaleString()} positions mapped
+            </span>
+            <span className="border-[2px] border-white px-3 py-2">{stats.proofs.toLocaleString()} proofs published</span>
+            <span className="border-[2px] border-white px-3 py-2">
+              ledger height {stats.ledgerHeight.toLocaleString()}
+            </span>
+          </div>
           <div className="pt-4">
             <button className="border-[2px] border-white bg-black text-white font-body-md text-body-md px-6 py-3 hover:bg-white hover:text-black transition-none flex items-center gap-3 group uppercase">
               Connect with Lichess
@@ -38,16 +48,19 @@ export default function HomePage() {
           </div>
           <div className="relative w-full h-12 bg-black border-[2px] border-white flex items-center px-4 overflow-hidden group cursor-crosshair">
             {/* Gauge Track */}
-            <div className="absolute left-0 top-0 bottom-0 dither-bg w-[68%] border-r-[2px] border-black transition-all duration-1000" />
+            <div
+              className="absolute left-0 top-0 bottom-0 dither-bg border-r-[2px] border-black transition-all duration-1000"
+              style={{ width: `${gaugePercent ?? 0}%` }}
+            />
             <div className="relative z-10 w-full flex justify-between font-data-mono text-data-mono text-black mix-blend-difference">
               <span className="text-white">0.00</span>
-              <span className="text-white">68.41%</span>
+              <span className="text-white">{gaugePercent === null ? 'N/A' : `${gaugePercent.toFixed(2)}%`}</span>
               <span className="text-white">100.00</span>
             </div>
           </div>
           <p className="font-data-mono text-data-mono text-white text-sm uppercase">
-            Aggregated volatility across 4-rung ladder (1M/4M/16M/64M nodes). Calibrated against
-            reference corpus.
+            Median Fog Index across every scored position. Percentiles are provisional pending the
+            100k-corpus calibration.
           </p>
         </div>
       </section>
