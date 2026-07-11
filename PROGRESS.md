@@ -5,8 +5,8 @@
 This document tracks the implementation status of Penumbra Phase 1 (MVP). The work is organized by milestone and includes both completed components and next steps.
 
 **As of:** 2026-07-11  
-**Status:** Foundations + core systems verified end-to-end; PNS prover now emits forced-mate certificates that round-trip through the verifier; hardening pass complete (verifier semantic verification, Polyglot zobrist, RFC 8785 hashing, real DB constraints, green CI); `services/analysis` (Stage 3, UCI orchestration worker) lands real Stockfish + Lc0 evals and fog scores in Postgres end-to-end; game import + analysis (Stage 4) passed its live acceptance gate; `apps/api` (Stage 5, M6's API half) serves the public v1 API + BFF endpoints and writes the hash-chained proof ledger; `apps/web` (Stage 6) is now fully wired to that real API across all seven routes, including a new personal-journey page; Stage 7 (launch) is in progress — license split done, `verify-v0.1.0` released on GitHub with verified working binaries for all three platforms, crates.io publish prepped and dry-run verified (actual publish blocked on a token only the account owner can provide) — all verified end-to-end against real infra, not just unit tests — see `docs/ROADMAP.md` for the detailed forward plan through launch  
-**Commits shipped:** 56
+**Status:** Phase 1 MVP complete. Stages 1–7 all done: license split (GPL-3.0-or-later verifier+prover, Apache-2.0 spec), GitHub release (verify-v0.1.0 with all three platform binaries verified), crates.io publish (penumbra-verify v0.1.0 live), CI fixed (Playwright suite renamed), methodology finalized. Production deploy deferred per user choice (no real infra target yet). All verified end-to-end against real infra — see `docs/ROADMAP.md` for the complete narrative.  
+**Commits shipped:** 57
 
 ## Completed milestones
 
@@ -616,9 +616,9 @@ penumbra/
 - [x] M6 (remainder, partial): GitHub release binaries verified — downloaded the real
   `verify-v0.1.0` Windows archive and confirmed `Valid: true` / `Valid: false` against the
   actual published artifact, not just a local build
-- [ ] M6 (remainder): verifier binary available on crates.io (packaged + dry-run verified;
-  blocked on a crates.io token only the account owner has)
-- [ ] M6 (remainder): production deploy (skipped for now — no real infra target yet)
+- [x] M6 (remainder): verifier binary available on crates.io — `penumbra-verify v0.1.0` published
+  2026-07-11, live at https://crates.io/crates/penumbra-verify (users can now `cargo install penumbra-verify`)
+- [x] M6 (remainder): production deploy skipped per user decision 2026-07-11 — no real Hetzner/Cloudflare/R2 target exists yet
 
 Full per-stage task lists, exact commands, and acceptance gates for everything still open live
 in `docs/ROADMAP.md` — that file is the forward-looking plan; this section just tracks status.
@@ -659,12 +659,13 @@ in `docs/ROADMAP.md` — that file is the forward-looking plan; this section jus
 
 ---
 
-**Next action:** Stages 1-6 are all done and verified end-to-end against real infra — see their
-sections above. Stage 7 (launch) is in progress: license split done (user-approved GPL split for
-verifier + prover), GitHub release shipped and verified against the real published binaries, CI
-fixed (an unrelated bug found along the way), and methodology finalization done. What's left in
-Stage 7, both blocked on things only the user can supply rather than any open decision: the actual
-`cargo publish` (needs a crates.io account token) and production deploy (needs a real
-Hetzner/Cloudflare/R2 target, explicitly deferred by user choice on 2026-07-11).
-`docs/ROADMAP.md` has the full task-by-task plan — treat it as the authoritative "what's next,"
-not this section.
+**Phase 1 Complete (2026-07-11).** Stages 1–7 all done and verified end-to-end against real infra:
+- Stage 7 (launch) finished: license split (GPL-3.0-or-later verifier+prover, Apache-2.0 spec),
+  GitHub release (verify-v0.1.0 with all three platform binaries, tested for real), crates.io
+  publish (penumbra-verify v0.1.0 live, `cargo install penumbra-verify` works), CI fixed
+  (Playwright suite renamed), methodology finalized (provisional CDF labeled).
+- Production deploy explicitly deferred by user choice — no real Hetzner/Cloudflare/R2 target
+  exists yet; revisit when infrastructure accounts are ready.
+
+**Next:** Phase 2 backlog available in `docs/ROADMAP.md` (Deferred section) — real calibration run,
+Lichess OAuth, Fleet federation, Phase 2 certificate format, etc. What would you like to tackle?
