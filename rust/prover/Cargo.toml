@@ -3,7 +3,7 @@ name = "penumbra-prover"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-license.workspace = true
+license = "GPL-3.0-or-later"
 description = "Penumbra proof-number search prover"
 
 [[bin]]

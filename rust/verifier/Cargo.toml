@@ -3,7 +3,7 @@ name = "penumbra-verify"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-license.workspace = true
+license = "GPL-3.0-or-later"
 description = "Penumbra certificate verifier CLI"
 
 [[bin]]

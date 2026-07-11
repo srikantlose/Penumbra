@@ -6,7 +6,6 @@ resolver = "2"
 version = "0.1.0"
 authors = ["Srikaanth"]
 edition = "2021"
-license = "UNLICENSED"
 
 [workspace.dependencies]
 thiserror = "1.0"

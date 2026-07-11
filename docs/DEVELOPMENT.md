@@ -183,7 +183,8 @@ cargo test --all
 
 **Licenses:**
 - App: UNLICENSED (private)
-- `verifier`, `cert-schema`, fog spec, calibration data: Apache-2.0 (maximum auditability)
+- `verifier`, `prover`: GPL-3.0-or-later (both link `shakmaty`/`shakmaty-syzygy`, GPL-3.0-or-later crates — copyleft propagates)
+- `cert-schema`, certificate spec, fog spec, calibration data: Apache-2.0 (maximum auditability)
 - Engines: separate GPL processes/bundles (no code redistribution, source offer on license page)
 
 See `docs/gpl-compliance.md` for every distribution surface and obligations.
