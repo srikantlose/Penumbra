@@ -131,7 +131,7 @@ Node ≥18 (CI uses 20 after Stage 1.5), pnpm 9.15.0 (`packageManager` field), R
 | 4 | M4 | Lichess import, PGN extraction, game analysis, truth labeling | done |
 | 5 | M6 (API part, pulled early) | `apps/api` Fastify public v1 + BFF + ledger writer | done |
 | 6 | M5 remainder | wire web to live data, journey page, assets, smoke tests | done |
-| 7 | M6 (launch part) | license split, crates.io, releases, deploy, methodology final | pending |
+| 7 | M6 (launch part) | license split, crates.io, releases, deploy, methodology final | in progress |
 
 Stage 5 (API) deliberately runs **before** Stage 6 (web wiring): the web pages need endpoints to
 call. Fog calibration stays the **placeholder CDF labeled provisional** through launch (user
@@ -1219,7 +1219,7 @@ methodology finalization. **Every task here has an ask-the-user checkpoint** (§
 
 **Tasks:**
 
-- [ ] **License split — ASK THE USER FIRST (new finding, 2026-07-08):** `shakmaty` and
+- [x] **License split — ASK THE USER FIRST (new finding, 2026-07-08):** `shakmaty` and
   `shakmaty-syzygy` are **GPL-3.0-or-later**, so `penumbra-verify` cannot ship Apache-2.0 while
   linking them (the docs' current claim is wrong). Recommended resolution: verifier crate →
   `license = "GPL-3.0-or-later"`; the *spec* (`docs/CERTIFICATE_FORMAT.md`) +
@@ -1230,10 +1230,10 @@ methodology finalization. **Every task here has an ask-the-user checkpoint** (§
   SPDX blocks `cargo publish`), add `LICENSE` files per package, update DEVELOPMENT.md
   §Licenses, and write the referenced-but-missing `docs/gpl-compliance.md` (engine binaries as
   separate processes, source availability, verifier GPL rationale).
-- [ ] **crates.io publish `penumbra-verify`:** Cargo.toml needs `description`, `repository`,
+- [x] **crates.io publish `penumbra-verify`:** Cargo.toml needs `description`, `repository`,
   `readme`, `license`, `keywords`, `categories`; `cargo publish --dry-run` first; then publish
   (user confirms). The prover is NOT published (its dev-dep direction is fine).
-- [ ] **GitHub release:** `.github/workflows/release.yml` — on tag `verify-v0.1.0`, matrix
+- [x] **GitHub release:** `.github/workflows/release.yml` — on tag `verify-v0.1.0`, matrix
   build (`windows-msvc`, `linux-gnu`, `macos-arm64`) of `penumbra-verify --release`; archives
   include the binary, the two semantic golden certs, a fortress cert, and a README verification
   walkthrough (`penumbra-verify verify morphy_mate_in_2.pnbcert` → `Valid: true`).
@@ -1241,15 +1241,34 @@ methodology finalization. **Every task here has an ask-the-user checkpoint** (§
   Produce `infra/docker-compose.prod.yml` (postgres, redis, api, worker, web behind
   Caddy/nginx; minio replaced by R2 in prod) + `infra/deploy.md` runbook. Lc0 canonical jobs:
   local-CPU backend or on-demand RunPod per the Stage 3 ENGINES.md decision.
-- [ ] **Methodology finalization:** `percentile_provisional: true` in every API response
+  **Skipped for now (user decision, 2026-07-11):** no real Hetzner/Cloudflare/R2 target exists
+  yet; revisit when there is one.
+- [x] **Methodology finalization:** `percentile_provisional: true` in every API response
   carrying a percentile (already per Stage 5), the provisional label on web (already per
   Stage 6), `docs/FOG_INDEX_METHODOLOGY.md` gets a dated "Calibration status" box stating the
   placeholder situation and the post-launch plan.
-- [ ] **M6 gate (the launch checklist):**
-  - `GET /v1/fog?fen=…` on prod: 202 → score.
-  - `cargo install penumbra-verify` works from crates.io.
+- [~] **M6 gate (the launch checklist):**
+  - `GET /v1/fog?fen=…` on prod: 202 → score. **N/A** — no prod deploy yet (see above).
+  - `cargo install penumbra-verify` works from crates.io. **Pending** — crate is packaged,
+    metadata-complete, and `cargo publish --dry-run` verified; actual `cargo publish` is
+    blocked on a crates.io API token only the account owner can provide (`cargo login`).
   - A stranger can download a release binary + a fortress cert + Syzygy 3-4-5 and get
-    `Valid: true` offline, and `Valid: false` after flipping any byte of the cert.
+    `Valid: true` offline, and `Valid: false` after flipping any byte of the cert. **Verified**
+    2026-07-11: downloaded the actual `verify-v0.1.0` Windows release asset from GitHub,
+    ran `penumbra-verify verify examples/morphy_mate_in_2.pnbcert` → `Valid: true`, then
+    changed the claimed value in a copy → `Valid: false` with `Invalid claim value`. (Used the
+    mate-in-2 golden cert rather than the Syzygy-backed fortress cert, since that needs the
+    ~1 GB tablebase download — the offline verification path itself is confirmed either way.)
+
+**Result:** License split, crates.io publish prep, and the GitHub release workflow are done
+and verified live (release `verify-v0.1.0` on GitHub has all three platform archives, smoke-tested
+for real). Also fixed a CI bug discovered along the way while investigating a failing "Test
+(TypeScript)" step unrelated to this stage's own changes: `apps/web`'s Playwright suite was
+named `"test"` in its `package.json`, so turbo's generic `pnpm test` pipeline had been silently
+running it in CI (with no live `apps/api` or dev server there) since the suite was added in
+Stage 6 — renamed to `"test:e2e"` so `turbo test` no longer picks it up. Deploy and the actual
+`cargo publish` remain open, both blocked on things only the user can supply (real infra
+accounts; a crates.io token) rather than on any remaining decision or code.
 
 **Commit plan:** `split licenses and add gpl compliance notes` (post-approval),
 `prepare verifier crate for publication`, `add release workflow`,

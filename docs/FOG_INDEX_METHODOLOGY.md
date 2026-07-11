@@ -134,6 +134,21 @@ Weights calibrated on training corpus to balance signals; revised per formula ve
 
 ## Calibration and percentiles
 
+> **Calibration status (2026-07-11): PROVISIONAL.** The CDF below is a
+> placeholder, not the output of a real calibration run against the corpus
+> described. It ships this way for launch deliberately (2026-07-08 decision)
+> rather than blocking launch on a 100k-position batch job. Every API
+> response carrying a calibration-derived percentile marks it
+> `percentile_provisional: true` (`apps/api`'s fog and positions routes; the
+> BFF's own stats use a plain statistical median, not this CDF, so they
+> carry no such field), and the web app surfaces the same label next to
+> every percentile it renders (`FogIndexCard`). The real
+> 100k-corpus calibration run is planned as a post-launch background job;
+> once it completes, this table gets replaced with real percentiles and the
+> provisional flag comes off everywhere at once (a single formula-version-scoped
+> change, not a per-route migration, since every consumer already reads the
+> flag rather than assuming a percentile is final).
+
 **Corpus:** 100,000 positions from Lichess elite database (plies 10–80, 2015–2025).
 
 **CDF (v0.1):**

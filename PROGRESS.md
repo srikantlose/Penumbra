@@ -5,8 +5,8 @@
 This document tracks the implementation status of Penumbra Phase 1 (MVP). The work is organized by milestone and includes both completed components and next steps.
 
 **As of:** 2026-07-11  
-**Status:** Foundations + core systems verified end-to-end; PNS prover now emits forced-mate certificates that round-trip through the verifier; hardening pass complete (verifier semantic verification, Polyglot zobrist, RFC 8785 hashing, real DB constraints, green CI); `services/analysis` (Stage 3, UCI orchestration worker) lands real Stockfish + Lc0 evals and fog scores in Postgres end-to-end; game import + analysis (Stage 4) passed its live acceptance gate; `apps/api` (Stage 5, M6's API half) serves the public v1 API + BFF endpoints and writes the hash-chained proof ledger; `apps/web` (Stage 6) is now fully wired to that real API across all seven routes, including a new personal-journey page — all verified end-to-end against real infra, not just unit tests — see `docs/ROADMAP.md` for the detailed forward plan through launch  
-**Commits shipped:** 52
+**Status:** Foundations + core systems verified end-to-end; PNS prover now emits forced-mate certificates that round-trip through the verifier; hardening pass complete (verifier semantic verification, Polyglot zobrist, RFC 8785 hashing, real DB constraints, green CI); `services/analysis` (Stage 3, UCI orchestration worker) lands real Stockfish + Lc0 evals and fog scores in Postgres end-to-end; game import + analysis (Stage 4) passed its live acceptance gate; `apps/api` (Stage 5, M6's API half) serves the public v1 API + BFF endpoints and writes the hash-chained proof ledger; `apps/web` (Stage 6) is now fully wired to that real API across all seven routes, including a new personal-journey page; Stage 7 (launch) is in progress — license split done, `verify-v0.1.0` released on GitHub with verified working binaries for all three platforms, crates.io publish prepped and dry-run verified (actual publish blocked on a token only the account owner can provide) — all verified end-to-end against real infra, not just unit tests — see `docs/ROADMAP.md` for the detailed forward plan through launch  
+**Commits shipped:** 56
 
 ## Completed milestones
 
@@ -509,6 +509,48 @@ from the existing 445+ imported positions.
 **Remaining for M6 in full:** verifier binary release (crates.io + GitHub releases), production
 deploy. Both are launch-stage (`docs/ROADMAP.md` Stage 7), not blocking Stage 6's web wiring.
 
+### 🟡 Stage 7 (launch, `docs/ROADMAP.md`): license split done, release shipped, deploy pending
+
+- **License split (done):** `shakmaty`/`shakmaty-syzygy` are GPL-3.0-or-later, so `penumbra-verify`
+  and `penumbra-prover` (both link them directly) can't be Apache-2.0 as the docs previously
+  claimed. User approved the recommended split: verifier + prover → GPL-3.0-or-later; certificate
+  spec + `cert-schema` + fog spec stay Apache-2.0; the app itself stays private/UNLICENSED.
+  Removed the invalid workspace-level `license = "UNLICENSED"` (not real SPDX, silently blocks
+  `cargo publish`), added `LICENSE` files, corrected `docs/DEVELOPMENT.md`, and wrote the
+  previously-referenced-but-missing `docs/gpl-compliance.md` (GPL rationale, the
+  engines-as-separate-processes boundary, source-availability story).
+- **crates.io publish (prepped, not yet published):** `rust/verifier/Cargo.toml` has the metadata
+  crates.io requires (`repository`, `readme`, `keywords`, `categories`) and a new `README.md`;
+  `cargo publish -p penumbra-verify --dry-run` packages and compiles cleanly from the tarball. The
+  actual `cargo publish` needs the account owner's own crates.io API token (`cargo login`), which
+  isn't something available in this environment — this is the one remaining task blocked purely on
+  a credential, not a decision.
+- **GitHub release (done and verified live):** `.github/workflows/release.yml` builds
+  `penumbra-verify --release` across `windows-msvc`, `linux-gnu`, `macos-arm64` on any `verify-v*`
+  tag push, bundling each archive with the two semantic golden certs, a fortress cert, and a verify
+  walkthrough; the release object itself is created by the workflow's own token. Tagged and pushed
+  `verify-v0.1.0` — the release built successfully and all three archives are live on GitHub.
+  Downloaded the actual Windows archive and ran the real walkthrough: `penumbra-verify verify
+  examples/morphy_mate_in_2.pnbcert` → `Valid: true`; changed the claimed value in a copy →
+  `Valid: false` with `Invalid claim value`. Both outcomes confirmed against the real published
+  artifact, not just the local build.
+- **CI bug fix (found and fixed along the way):** while investigating a "Test (TypeScript)"
+  failure on the last two pushes, found `apps/web`'s Playwright suite had been named `"test"` in
+  its `package.json` since Stage 6 — turbo's generic `pnpm test` runs every package's `test`
+  script, so CI had been silently trying to run the e2e suite with no live `apps/api` or dev
+  server, failing with `ECONNREFUSED`. Renamed the script to `"test:e2e"` (no matching `turbo.json`
+  entry, so `turbo test` skips it); running it by hand is unchanged
+  (`pnpm --filter @penumbra/web exec playwright test`). CI is green again as of this fix.
+- **Deploy (skipped for now, user decision 2026-07-11):** no real Hetzner/Cloudflare/R2 account
+  exists yet to deploy to; revisit `infra/docker-compose.prod.yml` + `infra/deploy.md` once there
+  is a real target.
+- **Methodology finalization (done):** confirmed `percentile_provisional: true` is already present
+  on every calibration-derived percentile in `apps/api` (fog + positions routes; the BFF's own
+  stats use a plain median, not the CDF, so no flag needed there) and that `FogIndexCard` on the
+  web app already labels it provisional. Added a dated "Calibration status" box to
+  `docs/FOG_INDEX_METHODOLOGY.md` stating the CDF is a placeholder and the real 100k-corpus run is
+  a post-launch background job.
+
 ## Architecture overview
 
 ```
@@ -537,7 +579,9 @@ penumbra/
 2. **Verifiable proofs:** All certificates are machine-checkable (independent verifier).
 3. **Deterministic fog:** Single-threaded fixed-node search for reproducibility.
 4. **Append-only history:** Engine evals + fog scores never deleted (archaeology).
-5. **Open-source core:** Verifier + cert-schema under Apache-2.0.
+5. **Open-source core:** Verifier + prover under GPL-3.0-or-later (they link `shakmaty`/
+   `shakmaty-syzygy`, which are themselves GPL); certificate spec + cert-schema + fog spec under
+   Apache-2.0. See `docs/gpl-compliance.md`.
 6. **Zero AI attribution:** Pre-commit hook enforces clean history; no trailers, no footers.
 
 ## Timeline estimate
@@ -569,7 +613,12 @@ penumbra/
 - [x] M6 (API half): `/v1/fog?fen=...` returns 202 then score (confirmed via a real canonical-tier
   job draining to a `fog_scores` row); proofs published + ledger verified (`LEDGER OK (13
   entries)`)
-- [ ] M6 (remainder): verifier binary available on crates.io
+- [x] M6 (remainder, partial): GitHub release binaries verified — downloaded the real
+  `verify-v0.1.0` Windows archive and confirmed `Valid: true` / `Valid: false` against the
+  actual published artifact, not just a local build
+- [ ] M6 (remainder): verifier binary available on crates.io (packaged + dry-run verified;
+  blocked on a crates.io token only the account owner has)
+- [ ] M6 (remainder): production deploy (skipped for now — no real infra target yet)
 
 Full per-stage task lists, exact commands, and acceptance gates for everything still open live
 in `docs/ROADMAP.md` — that file is the forward-looking plan; this section just tracks status.
@@ -610,14 +659,12 @@ in `docs/ROADMAP.md` — that file is the forward-looking plan; this section jus
 
 ---
 
-**Next action:** Stages 1-3 are all done — hardening, the M2 fortress track (Syzygy tablebases,
-`at_least_draw` proofs, 10 committed fortress certs), and now Stage 3 (`services/analysis`, the
-UCI orchestration worker) landing real Stockfish + Lc0 evals and fog scores in Postgres, verified
-end-to-end against real engine binaries and a real database, with `repro-test` confirming
-byte-identical reproducibility. Milestones M2 and M3 are both complete. Stage 4 (game import +
-analysis), Stage 5 (`apps/api`, M6's API half), and Stage 6 (wiring `apps/web` to that real API,
-plus the new `/journey` page) have all since shipped and passed their live acceptance gates — see
-their sections above. Next per `docs/ROADMAP.md` is Stage 7: launch (license split — has an
-ask-the-user checkpoint for the GPL finding — verifier crates.io release, GitHub release
-binaries, production deploy, methodology finalization). `docs/ROADMAP.md` has the full
-task-by-task plan for it — treat it as the authoritative "what's next," not this section.
+**Next action:** Stages 1-6 are all done and verified end-to-end against real infra — see their
+sections above. Stage 7 (launch) is in progress: license split done (user-approved GPL split for
+verifier + prover), GitHub release shipped and verified against the real published binaries, CI
+fixed (an unrelated bug found along the way), and methodology finalization done. What's left in
+Stage 7, both blocked on things only the user can supply rather than any open decision: the actual
+`cargo publish` (needs a crates.io account token) and production deploy (needs a real
+Hetzner/Cloudflare/R2 target, explicitly deferred by user choice on 2026-07-11).
+`docs/ROADMAP.md` has the full task-by-task plan — treat it as the authoritative "what's next,"
+not this section.
