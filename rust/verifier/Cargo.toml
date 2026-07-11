@@ -5,6 +5,10 @@ authors.workspace = true
 edition.workspace = true
 license = "GPL-3.0-or-later"
 description = "Penumbra certificate verifier CLI"
+repository = "https://github.com/srikantlose/Penumbra"
+readme = "README.md"
+keywords = ["chess", "verifier", "proof", "certificate"]
+categories = ["command-line-utilities", "games"]
 
 [[bin]]
 name = "penumbra-verify"

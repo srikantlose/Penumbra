@@ -1,0 +1,99 @@
+name: Release verifier
+
+on:
+  push:
+    tags:
+      - 'verify-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-msvc
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bin: penumbra-verify.exe
+          - name: linux-gnu
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bin: penumbra-verify
+          - name: macos-arm64
+            os: macos-latest
+            target: aarch64-apple-darwin
+            bin: penumbra-verify
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+
+      - name: Build penumbra-verify (release)
+        run: cargo build --release -p penumbra-verify --target ${{ matrix.target }}
+
+      - name: Assemble release archive
+        shell: bash
+        run: |
+          stage="penumbra-verify-${{ matrix.target }}"
+          mkdir -p "$stage/examples/fortress"
+          cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" "$stage/"
+          cp rust/verifier/README.md "$stage/"
+          cp rust/verifier/LICENSE "$stage/"
+          cp rust/prover/examples/morphy_mate_in_2.pnbcert "$stage/examples/"
+          cp rust/prover/examples/back_rank_mate_in_1.pnbcert "$stage/examples/"
+          cp rust/prover/examples/fortress/tierA_kpk_dead_draw.pnbcert "$stage/examples/fortress/"
+          cat > "$stage/VERIFY_WALKTHROUGH.md" <<'EOF'
+          # Verifying a certificate
+
+          From inside this archive's directory:
+
+          ```
+          ./penumbra-verify verify examples/morphy_mate_in_2.pnbcert
+          ```
+
+          Expected output: `Valid: true`. Flip any byte of the certificate file
+          and re-run the same command -- it prints `Valid: false` instead.
+
+          The fortress certificate (examples/fortress/tierA_kpk_dead_draw.pnbcert)
+          verifies the same way; it needs no Syzygy tablebase since it terminates
+          in a dead-draw position detectable from the board alone.
+          EOF
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "${stage}.zip" "$stage"
+            echo "ASSET=${stage}.zip" >> "$GITHUB_ENV"
+          else
+            tar czf "${stage}.tar.gz" "$stage"
+            echo "ASSET=${stage}.tar.gz" >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ASSET }}
+          path: ${{ env.ASSET }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
