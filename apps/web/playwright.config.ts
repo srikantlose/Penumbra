@@ -6,6 +6,11 @@ import { defineConfig, devices } from '@playwright/test';
 // analysis worker, fetched engine binaries (~1GB, gitignored), a seeded
 // PENUMBRA_API_KEY (scripts/seed-dev-api-key.mjs), and apps/api itself
 // running on :3001. Run by hand per the Stage 6 acceptance gate.
+//
+// package.json's script is named "test:e2e", not "test": turbo's generic
+// `pnpm test` runs every package's plain "test" script, and this suite
+// would otherwise get silently pulled into CI without any of the infra
+// above actually running there.
 export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
