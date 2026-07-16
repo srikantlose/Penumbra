@@ -12,6 +12,7 @@
     "build": "tsc",
     "type-check": "tsc --noEmit",
     "test": "node --test \"dist/**/*.test.js\"",
+    "seed": "node dist/seed.js",
     "clean": "rm -rf dist"
   },
   "dependencies": {
