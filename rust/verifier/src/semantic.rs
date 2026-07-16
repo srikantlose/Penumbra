@@ -27,7 +27,8 @@ use shakmaty::zobrist::{Zobrist64, ZobristHash};
 use shakmaty::{CastlingMode, Chess, Color, EnPassantMode, Position};
 
 use crate::error::VerifyError;
-use crate::tb::{self, TbOracle};
+use crate::tb::{self, TbBackend, TbOracle};
+use crate::tb_endpoint::EndpointTbOracle;
 use crate::verifier::{
   CertificateMove, CertificateNode, CertificateTerminal, CertificateVerifier, TablebasePolicy,
   VerifyOptions, VerifyReport,
@@ -46,11 +47,11 @@ struct SemanticCtx<'a> {
   path_zobrists: HashSet<String>,
   /// Node ids that have already passed every check (DAG sharing memo).
   verified: HashSet<String>,
-  /// Built once per verify pass under `TablebasePolicy::Syzygy` so table
-  /// files aren't reopened per terminal. `Err` records a load failure (bad
-  /// path, empty directory) so every tablebase terminal reports it instead
-  /// of retrying.
-  tb: Option<Result<TbOracle, String>>,
+  /// Built once per verify pass under `TablebasePolicy::Syzygy` or
+  /// `::Endpoint` so table files/HTTP clients aren't reopened per terminal.
+  /// `Err` records a load failure (bad path, empty directory) so every
+  /// tablebase terminal reports it instead of retrying.
+  tb: Option<Result<TbBackend, String>>,
 }
 
 impl CertificateVerifier {
@@ -81,7 +82,10 @@ impl CertificateVerifier {
     }
 
     let tb = match &opts.tb {
-      TablebasePolicy::Syzygy(dir) => Some(TbOracle::new(dir)),
+      TablebasePolicy::Syzygy(dir) => Some(TbOracle::new(dir).map(TbBackend::Local)),
+      TablebasePolicy::Endpoint(url) => {
+        Some(Ok(TbBackend::Endpoint(EndpointTbOracle::new(url.clone()))))
+      }
       TablebasePolicy::Forbid | TablebasePolicy::Assume => None,
     };
 
@@ -305,14 +309,14 @@ impl CertificateVerifier {
       "tablebase" => match &ctx.opts.tb {
         TablebasePolicy::Forbid => {
           report.errors.push(format!(
-            "terminal {} is a tablebase terminal but no tablebase source is configured (pass --syzygy or --assume-tb)",
+            "terminal {} is a tablebase terminal but no tablebase source is configured (pass --syzygy, --tb-endpoint, or --assume-tb)",
             node_id
           ));
         }
         TablebasePolicy::Assume => {
           report.assumed_probes += 1;
         }
-        TablebasePolicy::Syzygy(_) => {
+        TablebasePolicy::Syzygy(_) | TablebasePolicy::Endpoint(_) => {
           self.verify_tablebase_terminal(node_id, terminal, pos, ctx, report);
         }
       },
@@ -367,7 +371,9 @@ impl CertificateVerifier {
           .push(VerifyError::TablebaseError(format!("terminal {node_id}: {e}")).to_string());
         return;
       }
-      None => unreachable!("verify_tablebase_terminal only runs under TablebasePolicy::Syzygy"),
+      None => unreachable!(
+        "verify_tablebase_terminal only runs under TablebasePolicy::Syzygy or ::Endpoint"
+      ),
     };
 
     match oracle.probe(pos, ctx.claiming_side) {

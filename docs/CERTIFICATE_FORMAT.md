@@ -245,6 +245,23 @@ on the DTZ-rounding boundary; a verifier or prover must reject rather than guess
 already qualify as "at least a draw"). Also never probe a position with castling rights — Syzygy
 tables are castling-free and the result is undefined for one.
 
+### Network tablebase probing (`--tb-endpoint`)
+
+`penumbra-verify verify --tb-endpoint <URL>` probes a Lichess-compatible tablebase HTTP API
+(e.g. `https://tablebase.lichess.ovh/standard`) instead of loading local Syzygy files —
+same soundness check (declared value vs. probed WDL, same table above), covering the same ≤7
+men, at the cost of a network round trip per `tablebase` terminal and needing network access at
+verify time. The endpoint's own `category` field already reports the clock-adjusted 7-valued
+result directly (`win`/`cursed-win`/`maybe-win`/`draw`/`blessed-loss`/`maybe-loss`/`loss`), so no
+DTZ arithmetic is re-derived client-side — it's a straight string-to-`AmbiguousWdl` mapping.
+
+This is a different trust boundary than `--syzygy`: local Syzygy probing is something the
+verifier computes itself from table files it controls, while `--tb-endpoint` means trusting a
+remote service to answer honestly. It's still strictly stronger than `--assume-tb` (which trusts
+the certificate's own producer) — an independent third party is being asked, not the party that
+made the claim. `--syzygy` takes precedence if both are passed; `--offline` forces `Forbid`
+regardless of either.
+
 ## Examples
 
 ### Minimal fortress certificate (3 moves, 2 nodes)

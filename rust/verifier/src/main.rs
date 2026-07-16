@@ -23,7 +23,7 @@ enum Commands {
 
     #[arg(
       long,
-      help = "Tablebase endpoint URL (not implemented yet; use --syzygy)"
+      help = "Tablebase HTTP endpoint URL for network WDL probing (e.g. https://tablebase.lichess.ovh/standard), covers up to 7 men; alternative to --syzygy, requires network access at verify time"
     )]
     tb_endpoint: Option<String>,
 
@@ -66,16 +66,20 @@ fn main() -> ExitCode {
       structural_only,
       assume_tb,
     } => {
-      if tb_endpoint.is_some() {
-        eprintln!("--tb-endpoint is not implemented yet; use --syzygy instead");
-      }
       let tb = if offline {
-        if syzygy.is_some() || assume_tb {
-          eprintln!("--offline overrides --syzygy/--assume-tb; verifying with no tablebase source");
+        if syzygy.is_some() || tb_endpoint.is_some() || assume_tb {
+          eprintln!(
+            "--offline overrides --syzygy/--tb-endpoint/--assume-tb; verifying with no tablebase source"
+          );
         }
         TablebasePolicy::Forbid
       } else if let Some(dir) = syzygy {
+        if tb_endpoint.is_some() {
+          eprintln!("--syzygy takes precedence over --tb-endpoint; ignoring --tb-endpoint");
+        }
         TablebasePolicy::Syzygy(dir)
+      } else if let Some(url) = tb_endpoint {
+        TablebasePolicy::Endpoint(url)
       } else if assume_tb {
         TablebasePolicy::Assume
       } else {

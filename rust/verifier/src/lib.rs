@@ -2,6 +2,7 @@ pub mod error;
 pub mod hash;
 mod semantic;
 pub mod tb;
+pub mod tb_endpoint;
 pub mod verifier;
 
 pub use error::VerifyError;

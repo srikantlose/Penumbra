@@ -1,11 +1,13 @@
 # penumbra-verify
 
-Offline verifier for Penumbra chess proof certificates (`.pnbcert`). A
-certificate claims a specific outcome (mate-in-*n*, a proven draw, a dead
-fortress) for a specific position; this tool independently replays the
+Verifier for Penumbra chess proof certificates (`.pnbcert`), fully offline by
+default. A certificate claims a specific outcome (mate-in-*n*, a proven draw,
+a dead fortress) for a specific position; this tool independently replays the
 claimed line move-by-move against the position's legal moves and confirms
 the terminal, without trusting whatever engine or prover produced the
-certificate in the first place.
+certificate in the first place. Tablebase-backed terminals need either a
+local Syzygy directory or (optionally, trading offline-ness for convenience)
+a network tablebase endpoint — see `--syzygy`/`--tb-endpoint` below.
 
 Certificate format: see [`docs/CERTIFICATE_FORMAT.md`](https://github.com/srikantlose/Penumbra/blob/master/docs/CERTIFICATE_FORMAT.md)
 in the main repository.
@@ -33,7 +35,13 @@ Flags:
   certificates whose terminal is a tablebase result rather than mate/stalemate.
   Omit for certificates that terminate in checkmate/stalemate/insufficient
   material, which need no tablebase at all.
-- `--offline` — explicit no-tablebase mode (same effect as omitting `--syzygy`).
+- `--tb-endpoint <url>` — probe a Lichess-compatible tablebase HTTP API (e.g.
+  `https://tablebase.lichess.ovh/standard`) instead of local files. Covers the
+  same ≤7 men as `--syzygy` without the ~1GB table download, at the cost of a
+  network round trip per tablebase terminal and trusting the remote service's
+  answer rather than computing it yourself. Ignored if `--syzygy` is also given.
+- `--offline` — explicit no-tablebase mode (same effect as omitting both
+  `--syzygy` and `--tb-endpoint`; overrides either if also passed).
 - `--structural-only` — check the certificate's shape and hashes without
   replaying the line; useful for quickly rejecting malformed input.
 - `--assume-tb` — accept tablebase terminals on faith instead of probing.

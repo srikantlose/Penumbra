@@ -11,6 +11,24 @@ use std::path::Path;
 use shakmaty::{Chess, Color, Position};
 use shakmaty_syzygy::{AmbiguousWdl, Tablebase};
 
+use crate::tb_endpoint::EndpointTbOracle;
+
+/// Either tablebase probing source the semantic pass can be configured
+/// with, behind one call shape (`semantic.rs` doesn't need to know which).
+pub enum TbBackend {
+  Local(TbOracle),
+  Endpoint(EndpointTbOracle),
+}
+
+impl TbBackend {
+  pub fn probe(&self, pos: &Chess, perspective: Color) -> Result<AmbiguousWdl, String> {
+    match self {
+      TbBackend::Local(oracle) => oracle.probe(pos, perspective),
+      TbBackend::Endpoint(oracle) => oracle.probe(pos, perspective),
+    }
+  }
+}
+
 pub struct TbOracle {
   tb: Tablebase<Chess>,
   max_pieces: usize,

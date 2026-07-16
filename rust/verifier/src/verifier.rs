@@ -72,13 +72,17 @@ pub struct CertificateDependencies {
 /// tablebase claim without a configured source is rejected rather than
 /// trusted. `Assume` exists for inspecting/debugging certs before a real
 /// tablebase is wired up. `Syzygy` actually probes the loaded tables and
-/// checks the result against the terminal's declared value.
+/// checks the result against the terminal's declared value. `Endpoint`
+/// probes a Lichess-compatible tablebase HTTP API instead of local files --
+/// same soundness check, at the cost of trusting the remote service and
+/// needing network access at verify time.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum TablebasePolicy {
   #[default]
   Forbid,
   Assume,
   Syzygy(PathBuf),
+  Endpoint(String),
 }
 
 #[derive(Debug, Clone)]
