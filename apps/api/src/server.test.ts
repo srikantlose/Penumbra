@@ -14,7 +14,11 @@ import { publishProof, computeEntryHash, LEDGER_GENESIS_PREV_HASH } from './ledg
 // unique to avoid colliding with real imported games; the handful of rows
 // they insert are an accepted permanent fixture in local dev, same as
 // running scripts/publish-proofs.mjs by hand.
-const FOG_TEST_FEN = '8/8/8/6pk/8/8/6PK/8 w - - 0 1';
+// fog_scores is append-only (no disposable test database, see above) -- if
+// this FEN ever gets a real score cached against it (e.g. by manual smoke
+// testing), these cache-miss tests will fail forever locally with no way to
+// clean up. Swap to an unused synthetic FEN rather than trying to delete.
+const FOG_TEST_FEN = '8/8/8/3k4/8/3K4/3P4/8 w - - 0 1';
 const PROOF_TEST_EPD = '7k/8/8/8/8/8/8/K6R w - -';
 const PROOF_TEST_FEN = `${PROOF_TEST_EPD} 0 1`;
 
@@ -67,6 +71,12 @@ describe('apps/api', () => {
       const response = await app.inject({ method: 'GET', url: '/v1/fog' });
       expect(response.statusCode).toBe(400);
     });
+
+    it('400s an unparseable fen instead of 500ing', async () => {
+      const response = await app.inject({ method: 'GET', url: '/v1/fog?fen=not-a-fen' });
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({ error: expect.stringContaining('not-a-fen') });
+    });
   });
 
   describe('POST /v1/fog/batch', () => {
@@ -78,6 +88,16 @@ describe('apps/api', () => {
       });
       expect(response.statusCode).toBe(200);
       expect(response.json().results).toEqual([{ fen: FOG_TEST_FEN, status: 'pending', retry_after_ms: 5000 }]);
+    });
+
+    it('400s the whole batch when any fen is unparseable', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/fog/batch',
+        payload: { fens: [FOG_TEST_FEN, 'garbage'] },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({ error: expect.stringContaining('index 1') });
     });
   });
 

@@ -5,7 +5,14 @@ import { normalizeEPD } from '@penumbra/core';
 import { schema, isPositionProven } from '@penumbra/db';
 import { enqueueAnalyzePosition, computeFingerprintForTier } from '@penumbra/analysis';
 import { FOG_FORMULA_VERSION, type FogComponents } from '@penumbra/fog';
-import { fogQuerySchema, fogBatchBodySchema, fogReadySchema, fogPendingSchema, fogBatchResponseSchema } from '../schemas.js';
+import {
+  fogQuerySchema,
+  fogBatchBodySchema,
+  fogReadySchema,
+  fogPendingSchema,
+  fogBatchResponseSchema,
+  errorResponseSchema,
+} from '../schemas.js';
 import { type ApiContext, PUBLIC_FOG_TIER } from '../context.js';
 
 const RETRY_AFTER_MS = 5000;
@@ -65,13 +72,27 @@ async function resolveFog(context: ApiContext, fen: string): Promise<FogResult> 
   return { ready: false };
 }
 
+/** Cheap pre-check reusing normalizeEPD's own validation, so bad input 400s instead of 500ing inside resolveFog. */
+function isValidFen(fen: string): boolean {
+  try {
+    normalizeEPD(fen);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function registerFogRoutes(fastify: FastifyInstance, context: ApiContext): Promise<void> {
   const app = fastify.withTypeProvider<ZodTypeProvider>();
 
   app.get(
     '/v1/fog',
-    { schema: { querystring: fogQuerySchema, response: { 200: fogReadySchema, 202: fogPendingSchema } } },
+    { schema: { querystring: fogQuerySchema, response: { 200: fogReadySchema, 202: fogPendingSchema, 400: errorResponseSchema } } },
     async (request, reply) => {
+      if (!isValidFen(request.query.fen)) {
+        reply.code(400);
+        return { error: `invalid fen: "${request.query.fen}"` };
+      }
       const result = await resolveFog(context, request.query.fen);
       if (result.ready) {
         return {
@@ -90,8 +111,14 @@ export async function registerFogRoutes(fastify: FastifyInstance, context: ApiCo
 
   app.post(
     '/v1/fog/batch',
-    { schema: { body: fogBatchBodySchema, response: { 200: fogBatchResponseSchema } } },
-    async (request) => {
+    { schema: { body: fogBatchBodySchema, response: { 200: fogBatchResponseSchema, 400: errorResponseSchema } } },
+    async (request, reply) => {
+      const invalidIndex = request.body.fens.findIndex((fen) => !isValidFen(fen));
+      if (invalidIndex !== -1) {
+        reply.code(400);
+        return { error: `invalid fen at index ${invalidIndex}: "${request.body.fens[invalidIndex]}"` };
+      }
+
       const results = await Promise.all(
         request.body.fens.map(async (fen) => {
           const result = await resolveFog(context, fen);
