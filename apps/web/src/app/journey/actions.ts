@@ -1,6 +1,8 @@
 'use server';
 
-import { postBffImport, type BffImportResult } from '@/lib/api';
+import { redirect } from 'next/navigation';
+import { postBffImport, postBffLichessOAuthStart, type BffImportResult } from '@/lib/api';
+import { clearSession } from '@/lib/session';
 
 export interface ImportActionState {
   status: 'idle' | 'success' | 'error';
@@ -20,4 +22,16 @@ export async function importJourney(_prevState: ImportActionState, formData: For
   } catch (err) {
     return { status: 'error', error: err instanceof Error ? err.message : 'Import failed.' };
   }
+}
+
+/** Kicks off the PKCE flow and sends the browser to Lichess's consent screen. */
+export async function connectLichess(): Promise<void> {
+  const { authorizeUrl } = await postBffLichessOAuthStart();
+  redirect(authorizeUrl);
+}
+
+/** Forgets the local session only -- does not revoke the Lichess grant (the user can do that from lichess.org themselves). */
+export async function disconnectLichess(): Promise<void> {
+  await clearSession();
+  redirect('/journey');
 }

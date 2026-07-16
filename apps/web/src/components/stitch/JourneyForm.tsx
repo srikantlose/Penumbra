@@ -1,13 +1,13 @@
 'use client';
 
 import { useActionState, useEffect, useState } from 'react';
-import { importJourney, type ImportActionState } from '@/app/journey/actions';
+import { importJourney, connectLichess, disconnectLichess, type ImportActionState } from '@/app/journey/actions';
 import { fetchGame, type Game } from '@/lib/api';
 import { FogTimelineBar } from './FogTimelineBar';
 
 const initialState: ImportActionState = { status: 'idle' };
 
-export function JourneyForm() {
+export function JourneyForm({ connectedUsername }: { connectedUsername: string | null }) {
   const [state, formAction, isPending] = useActionState(importJourney, initialState);
   const [games, setGames] = useState<Game[]>([]);
 
@@ -27,9 +27,37 @@ export function JourneyForm() {
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        {connectedUsername ? (
+          <>
+            <span className="font-data-mono text-data-mono text-white uppercase">
+              Connected as {connectedUsername}
+            </span>
+            <form action={disconnectLichess}>
+              <button
+                className="border-[2px] border-white bg-black text-white font-label-caps text-label-caps px-4 py-2 hover:bg-white hover:text-black transition-none uppercase"
+                type="submit"
+              >
+                Disconnect
+              </button>
+            </form>
+          </>
+        ) : (
+          <form action={connectLichess}>
+            <button
+              className="border-[2px] border-white bg-black text-white font-label-caps text-label-caps px-4 py-2 hover:bg-white hover:text-black transition-none uppercase"
+              type="submit"
+            >
+              Connect Lichess Account
+            </button>
+          </form>
+        )}
+      </div>
+
       <form action={formAction} className="flex items-center gap-2">
         <input
           className="bg-black/80 backdrop-blur-md border-[2px] border-white text-white text-[12px] p-2 flex-1 outline-none font-data-mono uppercase placeholder:text-white/50"
+          defaultValue={connectedUsername ?? undefined}
           disabled={isPending}
           name="username"
           placeholder="LICHESS USERNAME"

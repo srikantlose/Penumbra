@@ -205,6 +205,45 @@ export async function postBffImport(username: string, max?: number): Promise<Bff
   return response.json() as Promise<BffImportResult>;
 }
 
+export interface LichessOAuthStart {
+  authorizeUrl: string;
+}
+
+/** Server-only, same PENUMBRA_API_KEY rule as postBffImport -- call only from a Server Action or route handler. */
+export async function postBffLichessOAuthStart(): Promise<LichessOAuthStart> {
+  const apiKey = process.env.PENUMBRA_API_KEY;
+  if (!apiKey) throw new Error('PENUMBRA_API_KEY is not set on the web server');
+
+  const response = await fetch(`${API_BASE_URL}/bff/lichess/oauth/start`, {
+    method: 'POST',
+    headers: { 'X-API-Key': apiKey },
+  });
+  if (!response.ok) throw new Error(`POST /bff/lichess/oauth/start failed: ${response.status}`);
+  return response.json() as Promise<LichessOAuthStart>;
+}
+
+export interface LichessOAuthCallbackResult {
+  userId: number;
+  lichessUsername: string;
+}
+
+/** Server-only -- forwards the code/state Lichess's redirect handed to /journey/connect/callback. */
+export async function postBffLichessOAuthCallback(code: string, state: string): Promise<LichessOAuthCallbackResult> {
+  const apiKey = process.env.PENUMBRA_API_KEY;
+  if (!apiKey) throw new Error('PENUMBRA_API_KEY is not set on the web server');
+
+  const response = await fetch(`${API_BASE_URL}/bff/lichess/oauth/callback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+    body: JSON.stringify({ code, state }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(body.error ?? `POST /bff/lichess/oauth/callback failed: ${response.status}`);
+  }
+  return response.json() as Promise<LichessOAuthCallbackResult>;
+}
+
 export interface FogTimelineEntry {
   ply: number;
   positionId: number;
