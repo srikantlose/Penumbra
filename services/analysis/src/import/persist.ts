@@ -73,6 +73,32 @@ export async function upsertPositions(
   return epdToId;
 }
 
+export interface UpsertLichessUserInput {
+  lichessId: string;
+  lichessUsername: string;
+  encryptedOauthTokens: string;
+}
+
+/** Inserts or updates the users row for a connected Lichess account (identified by lichess_id); returns its id either way. */
+export async function upsertLichessUser(db: Database, input: UpsertLichessUserInput): Promise<number> {
+  await db
+    .insert(schema.users)
+    .values({
+      lichessId: input.lichessId,
+      lichessUsername: input.lichessUsername,
+      oauthTokens: input.encryptedOauthTokens,
+    })
+    .onConflictDoUpdate({
+      target: schema.users.lichessId,
+      set: { lichessUsername: input.lichessUsername, oauthTokens: input.encryptedOauthTokens },
+    });
+
+  const [row] = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.lichessId, input.lichessId)).limit(1);
+
+  if (!row) throw new Error(`failed to upsert user for lichess id "${input.lichessId}"`);
+  return row.id;
+}
+
 /** Bulk-inserts the game's ply chain into game_positions in one statement. */
 export async function insertGamePositions(
   db: Database,

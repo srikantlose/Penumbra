@@ -42,7 +42,24 @@ export {
   lichessGameToUpsertInput,
   type LichessGame,
 } from './import/lichess.js';
-export { upsertGame, upsertPositions, insertGamePositions, type UpsertGameInput } from './import/persist.js';
+export {
+  generateCodeVerifier,
+  computeCodeChallenge,
+  generateOAuthState,
+  buildLichessAuthorizeUrl,
+  exchangeLichessCode,
+  fetchLichessAccount,
+  type LichessTokenResponse,
+  type LichessAccount,
+} from './import/lichessOAuth.js';
+export {
+  upsertGame,
+  upsertPositions,
+  insertGamePositions,
+  upsertLichessUser,
+  type UpsertGameInput,
+  type UpsertLichessUserInput,
+} from './import/persist.js';
 export { importGame, type ImportGameResult } from './import/importGame.js';
 export {
   detectProofEntryPly,
