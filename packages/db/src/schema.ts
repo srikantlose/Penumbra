@@ -197,7 +197,7 @@ export const analyses = pgTable(
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     gameId: bigint('game_id', { mode: 'number' }).notNull().references(() => games.id),
     tier: varchar('tier', { length: 20 }).notNull(), // 'quick', 'deep'
-    status: varchar('status', { length: 20 }).notNull(), // 'queued', 'running', 'done'
+    status: varchar('status', { length: 20 }).notNull(), // 'queued', 'running', 'done', 'failed'
     fogTimeline: json('fog_timeline'),
     proofEntryPly: integer('proof_entry_ply'),
     missedProofs: json('missed_proofs'),

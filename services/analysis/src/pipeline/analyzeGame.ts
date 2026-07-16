@@ -114,6 +114,11 @@ export async function analyzeGame(db: Database, input: AnalyzeGameInput): Promis
     // resulting MaxListenersExceededWarning is noise worth silencing.
     queue.setMaxListeners(enginePositions.length + 10);
 
+    // Marks the row as no longer just sitting in the create-time default --
+    // anything that fails past this point should end at 'failed', not linger
+    // at 'queued' forever (see the catch block below).
+    await db.update(schema.analyses).set({ status: 'running' }).where(eq(schema.analyses.id, analysisId));
+
     const priority = input.tier === 'deep' ? DEEP_TIER_PRIORITY : undefined;
     const jobIds = await Promise.all(
       enginePositions.map((position) => enqueueAnalyzePosition(queue, epdToFen(position.epd), engineTier, { priority }))
@@ -174,6 +179,15 @@ export async function analyzeGame(db: Database, input: AnalyzeGameInput): Promis
       .where(eq(schema.analyses.id, analysisId));
 
     return { analysisId, fogTimeline, proofEntryPly, missedProofs };
+  } catch (err) {
+    // Best-effort: don't let a failure to mark the row 'failed' mask the
+    // real error that caused this catch in the first place.
+    await db
+      .update(schema.analyses)
+      .set({ status: 'failed' })
+      .where(eq(schema.analyses.id, analysisId))
+      .catch(() => {});
+    throw err;
   } finally {
     await queueEvents.close();
     await queue.close();
