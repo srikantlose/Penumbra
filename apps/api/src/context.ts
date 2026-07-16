@@ -28,6 +28,19 @@ export function webOrigin(): string {
   return process.env.WEB_ORIGIN || 'http://localhost:3000';
 }
 
+// Not a secret -- it's visible in the outgoing /oauth redirect URL either
+// way -- so unlike TOKEN_ENCRYPTION_KEY this is safe to default for local dev.
+export function lichessOAuthClientId(): string {
+  return process.env.LICHESS_OAUTH_CLIENT_ID || 'penumbra-local-dev';
+}
+
+// Must exactly match between the authorize request and the token exchange
+// (OAuth spec requirement) -- computed once here so both call sites in
+// routes/bff.ts can't drift apart.
+export function lichessOAuthRedirectUri(): string {
+  return `${webOrigin()}/journey/connect/callback`;
+}
+
 // The bucket infra/docker-compose.yml's minio service is expected to serve
 // certs from -- created if missing by ensureProofsBucket (see ledger.ts).
 export const PROOFS_BUCKET = 'proofs';

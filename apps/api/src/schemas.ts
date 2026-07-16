@@ -231,6 +231,20 @@ export const bffImportResponseSchema = z.object({
   gameIds: z.array(z.number()),
 });
 
+export const bffLichessOAuthStartResponseSchema = z.object({
+  authorizeUrl: z.string(),
+});
+
+export const bffLichessOAuthCallbackBodySchema = z.object({
+  code: z.string().min(1),
+  state: z.string().min(1),
+});
+
+export const bffLichessOAuthCallbackResponseSchema = z.object({
+  userId: z.number(),
+  lichessUsername: z.string(),
+});
+
 export const errorResponseSchema = z.object({
   error: z.string(),
 });
