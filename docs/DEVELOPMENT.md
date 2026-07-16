@@ -28,25 +28,30 @@ penumbra/
 
 ## Local setup
 
+**See [README.md](../README.md#quick-start--local-development-5-minutes) for step-by-step setup.**
+
 ### Prerequisites
 - Node.js ≥ 18, pnpm ≥ 8
-- Rust (stable) for the verifier/prover
-- Docker & Docker Compose for services (Postgres, Redis, Minio)
+- PostgreSQL (local or Docker)
+- Docker & Docker Compose (optional; for Postgres, Redis, Minio)
+- Rust (stable) only if modifying `rust/verifier` or `rust/prover`
 
-### Install & run
+### Quick reference (after first setup)
+
 ```bash
-# Install dependencies
-pnpm install
-
-# Start services (postgres, redis, minio)
+# Start services once
 docker-compose -f infra/docker-compose.yml up -d
 
-# Run migrations
-pnpm --filter db run migrate
+# Terminal 1: API server
+pnpm --filter @penumbra/api dev
 
-# Dev server (all apps/services)
-pnpm dev
+# Terminal 2: Web app
+pnpm --filter @penumbra/web dev
+
+# Open http://localhost:3001
 ```
+
+**Note:** `pnpm dev` (no filter) attempts to run all packages in parallel, which is error-prone. Instead, run the API and web servers in separate terminals as shown above.
 
 ### Design import (Google Stitch)
 
