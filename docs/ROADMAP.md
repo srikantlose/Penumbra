@@ -1414,7 +1414,18 @@ accounts; a crates.io token) rather than on any remaining decision or code.
   accepts any public username. Verified live against real `lichess.org` endpoints (real 400 on a
   fake code, real Redis TTL, single-use replay rejection); no code path yet reads the stored
   token back (nothing needs it while game export stays public/unauthenticated).
-- **Verifier `--tb-endpoint`** (Lichess 6-7-man network probing) — spec'd flag, deferred.
+- ~~**Verifier `--tb-endpoint`**~~ **Done 2026-07-16.** `rust/verifier/src/tb_endpoint.rs` adds
+  `EndpointTbOracle`, probing a Lichess-compatible tablebase HTTP API (`ureq`, blocking, no
+  runtime needed since the whole CLI stays synchronous) instead of local Syzygy files. The
+  endpoint's own `category` field already reports the clock-adjusted 7-valued WDL directly, so
+  it's a straight string mapping, not a DTZ reimplementation — same `wdl_matches` soundness table
+  as `--syzygy`, wired through a new `TbBackend` enum (`tb.rs`) so `semantic.rs` doesn't care
+  which source answered. `--syzygy` takes precedence if both flags are passed (warns); `--offline`
+  still overrides either. Verified live against the real `https://tablebase.lichess.ovh/standard`
+  endpoint: a real fortress cert verifies `Valid: true, Probes: 1` with no local tablebase files
+  present at all, and a tampered copy (`win` claim flipped onto a real draw) is correctly rejected
+  by the live probe. No automated test hits the network (matches this repo's standing convention
+  of not unit-testing real network calls); `category_to_wdl`'s pure string mapping is unit tested.
 - **Phase 2 items** (per CERTIFICATE_FORMAT.md): zstd container (`PNBC` magic), signatures /
   attestation, work-unit federation ("Fleet"), transposition-aware win certs.
 - **`missed_proofs` beyond the ≤8-men v1 scope.**

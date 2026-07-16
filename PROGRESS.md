@@ -718,6 +718,41 @@ on a reused `state`, the 401 API-key gate, and no stray rows left in `users` aft
 type-check/lint/test suites green with no regressions (`pnpm --filter @penumbra/api test` 25/25
 against live Postgres/Redis, `@penumbra/analysis` 65/65 incl. 6 new).
 
+### ✅ Verifier `--tb-endpoint` (2026-07-16)
+
+`penumbra-verify verify --tb-endpoint <url>` now actually works — previously the flag was parsed
+but printed "not implemented yet; use --syzygy instead" and fell through to `Forbid`. Chosen from
+the Phase 2 backlog (`docs/ROADMAP.md` Deferred section).
+
+- `rust/verifier/src/tb_endpoint.rs` — `EndpointTbOracle`, a blocking `ureq` client (no async
+  runtime needed; the whole CLI stays synchronous) probing a Lichess-compatible tablebase HTTP
+  API. The endpoint's `category` field already reports the clock-adjusted 7-valued WDL directly
+  (`win`/`cursed-win`/`maybe-win`/`draw`/`blessed-loss`/`maybe-loss`/`loss`), so this is a
+  straight string-to-`AmbiguousWdl` mapping, not a reimplementation of the DTZ/halfmove-clock
+  arithmetic `tb::TbOracle` already does for local Syzygy files.
+- `rust/verifier/src/tb.rs` gained a small `TbBackend` enum (`Local`/`Endpoint`) so
+  `semantic.rs`'s traversal calls one `.probe()` shape regardless of which source is configured —
+  `verifier.rs`'s `TablebasePolicy` gained the matching `Endpoint(String)` variant.
+- CLI precedence: `--syzygy` wins if both `--syzygy` and `--tb-endpoint` are passed (warns);
+  `--offline` still forces `Forbid` over either. Same soundness-by-default behavior as before —
+  omitting all three tablebase flags still rejects a tablebase-terminal certificate outright.
+- `docs/CERTIFICATE_FORMAT.md` gained a "Network tablebase probing" subsection documenting the
+  trust-boundary difference from `--syzygy` (trusting a remote service to answer honestly,
+  vs. the verifier computing the answer itself from files it controls) — still strictly stronger
+  than `--assume-tb`, which trusts the certificate's own producer. `rust/verifier/README.md`
+  (the crate's crates.io-facing docs) updated to match.
+
+**Verified live**, not just unit-tested: ran the real CLI against the real
+`https://tablebase.lichess.ovh/standard` endpoint with no local tablebase files present at all —
+a real fortress certificate verifies `Valid: true, Probes: 1`; a copy with the claimed value
+flipped from `draw` to `win` is correctly rejected (`Valid: false`, the probe-vs-declared-value
+mismatch error). Confirmed the default (no tablebase flags) still rejects the same certificate,
+and that `--syzygy`-and-`--tb-endpoint`-together and `--offline`-overrides-both both behave as
+documented. `cargo test --workspace` (32/32), `cargo clippy --workspace --all-targets` (zero
+warnings), `cargo fmt --all -- --check` all green. No automated test hits the network — matches
+this repo's standing convention of not unit-testing real network calls (`category_to_wdl`'s pure
+string mapping is unit tested instead).
+
 **Next:** remaining Phase 2 backlog in `docs/ROADMAP.md` (Deferred section) — real calibration
-run, verifier `--tb-endpoint`, Fleet federation, Phase 2 certificate format, `missed_proofs`
-beyond ≤8 men. What would you like to tackle?
+run, Fleet federation, Phase 2 certificate format, `missed_proofs` beyond ≤8 men. What would you
+like to tackle?
