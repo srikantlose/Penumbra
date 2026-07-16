@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { parseLichessGame, parseLichessGameLine } from './lichess.js';
+import { parseLichessGame, parseLichessGameLine, deriveResult, lichessGameToUpsertInput } from './lichess.js';
 
 function loadFixtureLines(name: string): string[] {
   const path = fileURLToPath(new URL(`../../test-fixtures/${name}`, import.meta.url));
@@ -17,6 +17,7 @@ describe('parseLichessGameLine', () => {
       id: 'aBcD1234',
       players: { white: 'alice', black: 'bob' },
       winner: 'white',
+      status: 'mate',
       pgn: '[Event "Rated blitz game"]\n[White "alice"]\n[Black "bob"]\n[Result "1-0"]\n\n1. e4 e5 1-0',
       variant: 'standard',
       speed: 'blitz',
@@ -27,6 +28,7 @@ describe('parseLichessGameLine', () => {
   it('parses a standard casual draw with no winner field as winner: undefined', () => {
     const game = parseLichessGameLine(lines[1]);
     expect(game?.winner).toBeUndefined();
+    expect(game?.status).toBe('draw');
     expect(game?.players).toEqual({ white: 'carol', black: 'dave' });
   });
 
@@ -38,10 +40,55 @@ describe('parseLichessGameLine', () => {
     expect(parseLichessGameLine(lines[3])).toBeNull();
   });
 
-  it('parses every fixture line without throwing, yielding exactly 2 standard games with pgn', () => {
+  it('parses an aborted game with no winner and a non-draw status', () => {
+    const game = parseLichessGameLine(lines[4]);
+    expect(game?.winner).toBeUndefined();
+    expect(game?.status).toBe('aborted');
+  });
+
+  it('parses every fixture line without throwing, yielding exactly 3 standard games with pgn', () => {
     const parsed = lines.map(parseLichessGameLine).filter((g) => g !== null);
-    expect(parsed).toHaveLength(2);
-    expect(parsed.map((g) => g.id)).toEqual(['aBcD1234', 'eFgH5678']);
+    expect(parsed).toHaveLength(3);
+    expect(parsed.map((g) => g.id)).toEqual(['aBcD1234', 'eFgH5678', 'qRsT7890']);
+  });
+});
+
+describe('deriveResult', () => {
+  it('maps a white winner to "1-0"', () => {
+    expect(deriveResult('white', 'mate')).toBe('1-0');
+  });
+
+  it('maps a black winner to "0-1"', () => {
+    expect(deriveResult('black', 'resign')).toBe('0-1');
+  });
+
+  it('maps no winner + a draw status to "1/2-1/2"', () => {
+    expect(deriveResult(undefined, 'draw')).toBe('1/2-1/2');
+    expect(deriveResult(undefined, 'stalemate')).toBe('1/2-1/2');
+  });
+
+  it('maps no winner + a non-draw status (aborted, noStart, ...) to null rather than assuming a draw', () => {
+    expect(deriveResult(undefined, 'aborted')).toBeNull();
+    expect(deriveResult(undefined, 'noStart')).toBeNull();
+  });
+});
+
+describe('lichessGameToUpsertInput', () => {
+  it('builds an UpsertGameInput with the derived result', () => {
+    const game = parseLichessGameLine(loadFixtureLines('lichess-games.ndjson')[0])!;
+    expect(lichessGameToUpsertInput(game)).toEqual({
+      source: 'lichess',
+      sourceGameId: 'aBcD1234',
+      white: 'alice',
+      black: 'bob',
+      result: '1-0',
+      pgn: game.pgn,
+    });
+  });
+
+  it('carries a null result through for an aborted game', () => {
+    const game = parseLichessGameLine(loadFixtureLines('lichess-games.ndjson')[4])!;
+    expect(lichessGameToUpsertInput(game).result).toBeNull();
   });
 });
 

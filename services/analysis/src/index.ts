@@ -38,6 +38,8 @@ export {
   fetchGame,
   parseLichessGame,
   parseLichessGameLine,
+  deriveResult,
+  lichessGameToUpsertInput,
   type LichessGame,
 } from './import/lichess.js';
 export { upsertGame, upsertPositions, insertGamePositions, type UpsertGameInput } from './import/persist.js';

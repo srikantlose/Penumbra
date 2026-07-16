@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { getDatabase } from '@penumbra/db';
-import { streamUserGames, type LichessGame } from '../import/lichess.js';
+import { streamUserGames, lichessGameToUpsertInput } from '../import/lichess.js';
 import { extractGames } from '../import/pgn.js';
 import { importGame } from '../import/importGame.js';
 import type { UpsertGameInput } from '../import/persist.js';
@@ -41,23 +41,6 @@ function parseImportArgs(argv: string[]): ImportArgs {
   return { user, max, pgnFile };
 }
 
-function deriveResult(winner: 'white' | 'black' | undefined): string {
-  if (winner === 'white') return '1-0';
-  if (winner === 'black') return '0-1';
-  return '1/2-1/2';
-}
-
-function lichessGameToInput(game: LichessGame): UpsertGameInput {
-  return {
-    source: 'lichess',
-    sourceGameId: game.id,
-    white: game.players.white,
-    black: game.players.black,
-    result: deriveResult(game.winner),
-    pgn: game.pgn,
-  };
-}
-
 // A manual PGN file has no canonical id like a Lichess game does; hashing
 // the re-serialized PGN text makes reimporting the same file idempotent
 // against the (source, source_game_id) unique index instead of creating a
@@ -74,7 +57,7 @@ export async function runImportCommand(argv: string[], databaseUrl: string): Pro
 
   if (args.user) {
     for await (const game of streamUserGames(args.user, { max: args.max })) {
-      const { gameId, positions } = await importGame(db, lichessGameToInput(game));
+      const { gameId, positions } = await importGame(db, lichessGameToUpsertInput(game));
       imported++;
       console.log(`imported game ${game.id} -> db id ${gameId} (${positions.length} positions)`);
     }

@@ -2,7 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { schema, SYZYGY_MAX_PIECES } from '@penumbra/db';
-import { computeFingerprintForTier, streamUserGames, importGame, type LichessGame } from '@penumbra/analysis';
+import { computeFingerprintForTier, streamUserGames, importGame, lichessGameToUpsertInput } from '@penumbra/analysis';
 import { FOG_FORMULA_VERSION } from '@penumbra/fog';
 import {
   bffStatsResponseSchema,
@@ -14,23 +14,6 @@ import { type ApiContext, PUBLIC_FOG_TIER } from '../context.js';
 import { requireApiKey } from '../plugins/auth.js';
 
 const DEFAULT_IMPORT_MAX = 20;
-
-function deriveResult(winner: 'white' | 'black' | undefined): string {
-  if (winner === 'white') return '1-0';
-  if (winner === 'black') return '0-1';
-  return '1/2-1/2';
-}
-
-function lichessGameToImportInput(game: LichessGame) {
-  return {
-    source: 'lichess',
-    sourceGameId: game.id,
-    white: game.players.white,
-    black: game.players.black,
-    result: deriveResult(game.winner),
-    pgn: game.pgn,
-  };
-}
 
 export async function registerBffRoutes(fastify: FastifyInstance, context: ApiContext): Promise<void> {
   const app = fastify.withTypeProvider<ZodTypeProvider>();
@@ -63,16 +46,26 @@ export async function registerBffRoutes(fastify: FastifyInstance, context: ApiCo
   app.get('/bff/frontier', { schema: { response: { 200: bffFrontierResponseSchema } } }, async () => {
     // "proven" mirrors packages/db/src/truth.ts's deriveTruthStatus exactly:
     // a formal proof, or (within tablebase range) a cached tablebase probe.
+    // EXISTS subqueries rather than LEFT JOINs against proofs/tb_probes --
+    // proofs.position_id isn't unique (a position can carry more than one
+    // proof row), so joining it directly would fan out that position's
+    // fog_scores row too, skewing percentile_cont(medianFog). The remaining
+    // fog_scores join stays 1:1 per position (its own unique index is on
+    // position_id + formula_version + engine_fingerprint), so no fan-out
+    // survives here.
     const rows = await context.db
       .select({
         pieceCount: schema.positions.pieceCount,
-        positions: sql<number>`count(distinct ${schema.positions.id})::int`,
-        proven: sql<number>`count(distinct case when ${schema.proofs.id} is not null or (${schema.positions.pieceCount} <= ${SYZYGY_MAX_PIECES} and ${schema.tbProbes.id} is not null) then ${schema.positions.id} end)::int`,
+        positions: sql<number>`count(*)::int`,
+        proven: sql<number>`count(*) filter (where exists (
+          select 1 from ${schema.proofs} where ${schema.proofs.positionId} = ${schema.positions.id}
+        ) or (
+          ${schema.positions.pieceCount} <= ${SYZYGY_MAX_PIECES}
+          and exists (select 1 from ${schema.tbProbes} where ${schema.tbProbes.positionId} = ${schema.positions.id})
+        ))::int`,
         medianFog: sql<number | null>`percentile_cont(0.5) within group (order by ${schema.fogScores.score})`,
       })
       .from(schema.positions)
-      .leftJoin(schema.proofs, eq(schema.proofs.positionId, schema.positions.id))
-      .leftJoin(schema.tbProbes, eq(schema.tbProbes.positionId, schema.positions.id))
       .leftJoin(
         schema.fogScores,
         and(
@@ -107,7 +100,7 @@ export async function registerBffRoutes(fastify: FastifyInstance, context: ApiCo
       const gameIds: number[] = [];
 
       for await (const game of streamUserGames(username, { max: max ?? DEFAULT_IMPORT_MAX })) {
-        const { gameId } = await importGame(context.db, lichessGameToImportInput(game));
+        const { gameId } = await importGame(context.db, lichessGameToUpsertInput(game));
         gameIds.push(gameId);
       }
 

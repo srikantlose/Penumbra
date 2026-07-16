@@ -1,3 +1,5 @@
+import type { UpsertGameInput } from './persist.js';
+
 const LICHESS_BASE = 'https://lichess.org';
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -5,6 +7,8 @@ export interface LichessGame {
   id: string;
   players: { white: string | null; black: string | null };
   winner: 'white' | 'black' | undefined;
+  /** Lichess's own game-end status (e.g. "mate", "resign", "draw", "aborted", "noStart"). */
+  status: string;
   pgn: string;
   variant: string;
   speed: string;
@@ -17,6 +21,7 @@ interface RawLichessGame {
   speed?: string;
   perf?: string;
   createdAt: number;
+  status?: string;
   players?: {
     white?: { user?: { name?: string } };
     black?: { user?: { name?: string } };
@@ -43,10 +48,36 @@ export function parseLichessGame(raw: unknown): LichessGame | null {
       black: game.players?.black?.user?.name ?? null,
     },
     winner: game.winner,
+    status: game.status ?? 'unknown',
     pgn: game.pgn,
     variant: game.variant,
     speed: game.speed ?? game.perf ?? 'unknown',
     createdAt: game.createdAt,
+  };
+}
+
+// The only Lichess end statuses that mean "no winner, but a genuine draw".
+// Every other no-winner status (aborted, noStart, cheat, unknownFinish, ...)
+// has no well-defined game result, so it maps to null rather than silently
+// becoming a draw.
+const DRAW_STATUSES = new Set(['draw', 'stalemate']);
+
+/** '1-0' / '0-1' / '1/2-1/2' / null (no well-defined result), from Lichess's own winner + status fields. */
+export function deriveResult(winner: 'white' | 'black' | undefined, status: string): string | null {
+  if (winner === 'white') return '1-0';
+  if (winner === 'black') return '0-1';
+  return DRAW_STATUSES.has(status) ? '1/2-1/2' : null;
+}
+
+/** Shared by the CLI import path and the /bff/import route so the two never drift. */
+export function lichessGameToUpsertInput(game: LichessGame): UpsertGameInput {
+  return {
+    source: 'lichess',
+    sourceGameId: game.id,
+    white: game.players.white,
+    black: game.players.black,
+    result: deriveResult(game.winner, game.status),
+    pgn: game.pgn,
   };
 }
 
