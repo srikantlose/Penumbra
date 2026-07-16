@@ -25,6 +25,8 @@ The proof is an AND/OR directed acyclic graph (DAG):
 - **AND-node**: The opponent moves. Certificate must cover **all legal moves** from this position (verifier regenerates the move list independently).
 - **Terminal**: Proof ends at checkmate, stalemate, or a position referenced in the Syzygy tablebase (≤7 pieces).
 
+The DAG is allowed to reconverge: if the same position is reached from more than one branch, every parent's move edge may point at the same `child_id` rather than each carrying its own duplicate copy of that subtree. The verifier's node lookup is by id, so a shared id is checked once and treated as valid everywhere it's referenced. `penumbra-prove` takes advantage of this to keep certificates for lines with real transpositions smaller.
+
 ### Cycle discipline (soundness)
 
 - **`win` certificates must be acyclic** (proof of game-theoretic win requires well-founded progress to terminal wins via the chosen line + forced opponent responses).
@@ -34,7 +36,7 @@ The spec explicitly documents this asymmetry.
 
 ## Format (JSON)
 
-Certificates are stored as canonical JSON (RFC 8785 / JCS) within a zstd-compressed container.
+Certificates are stored as canonical JSON (RFC 8785 / JCS) within a `PNBC` container, optionally zstd-compressed.
 
 ### Top-level fields
 
@@ -167,10 +169,10 @@ Lists external dependencies. Currently only `"syzygy"` is supported (optional if
 
 ```
 [4 bytes magic: "PNBC"]
-[JSON Certificate - canonical RFC 8785 / JCS]
+[payload: JSON Certificate (canonical RFC 8785 / JCS), or a zstd frame of it]
 ```
 
-For Phase 1, the JSON is stored plaintext. Phase 2 may add zstd compression; verifier supports both.
+The verifier auto-detects the payload by sniffing zstd's own frame magic (`28 B5 2F FD`) right after `PNBC`: present -> decompress, absent -> read the rest as plaintext JSON. `penumbra-prove` writes the `PNBC`-prefixed plaintext form by default; pass `--compress` to write the zstd form instead. Files with no `PNBC` prefix at all (every certificate produced before this container existed) are read as plain JSON directly — old certificates remain verifiable forever.
 
 ## Identity & integrity
 
@@ -331,5 +333,5 @@ Format versions are independent. A v0.2 may introduce binary encoding or zstd by
 
 ## Compliance notes
 
-- **GPL:** The verifier is distributed under Apache-2.0 (maximum auditability). Engine binaries remain GPL.
+- **GPL:** The verifier binary is GPL-3.0-or-later (it links `shakmaty`/`shakmaty-syzygy`, both GPL-3.0-or-later, so copyleft propagates). This spec document, the JSON Schema, and `cert-schema` are Apache-2.0 (maximum auditability) — only the compiled verifier carries the copyleft obligation. Engine binaries remain GPL.
 - **Independence:** The verifier has zero code shared with the prover; move generation is via `shakmaty` (third-party).

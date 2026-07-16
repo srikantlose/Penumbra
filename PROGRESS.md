@@ -784,5 +784,55 @@ green. No network-dependent behavior changed (still gated by `ensureTablebasePro
 `SYZYGY_MAX_PIECES` check), so no new live-network verification was needed beyond the existing
 tablebase test coverage.
 
+### ✅ Transposition-aware win certs + zstd/`PNBC` wire container (2026-07-17)
+
+Two bounded Phase 2 certificate-format pieces, scoped down from the full "Fleet federation / cert
+format" backlog item: dedup transposing nodes at certificate-emission time, and make the
+`docs/CERTIFICATE_FORMAT.md`-specified `PNBC` container real. Fleet work-unit federation and
+certificate signatures/attestation are still deferred — no existing infra for either, and both need
+a concrete multi-contributor scenario to design against.
+
+- **Transposition-aware win certs** — `rust/prover/src/pns.rs`'s PNS search arena is a strict tree
+  (`PnsNode.parent: Option<usize>`); `expand()` always allocates a fresh node per legal move even
+  when it transposes into a position already proved elsewhere in the arena, so `emit()` previously
+  re-serialized a full duplicate subtree per occurrence. `emit` now takes a `zobrist -> emitted node
+  id` cache: the first time a zobrist is seen it's emitted normally, every later occurrence returns
+  the existing id instead of re-emitting, so multiple parents' `moves[].child_id` end up pointing at
+  one shared node. This only changes serialization after the proof is already found — the search
+  algorithm itself is untouched, so it can't introduce the graph-history-interaction unsoundness
+  that merging transpositions *during* PNS search is known for. No verifier changes were needed:
+  reading `rust/verifier/src/verifier.rs`'s `dfs_check_acyclic` and `rust/verifier/src/semantic.rs`'s
+  `verify_node` confirmed both already treat a node id reachable from multiple parents as a normal
+  DAG reconvergence (only a back-edge to a *current-path* ancestor is rejected), so shared win-cert
+  nodes already verified correctly before this change — the gap was purely on the emission side.
+  New unit test (`pns::tests::emit_dedupes_transposing_children`) hand-builds an arena with two
+  children sharing a zobrist and asserts they collapse into one emitted node; the existing
+  `morphy_mate_in_two_verifies` integration test (`node_count == 16`) still passes unchanged, since
+  that position's seven replies don't actually transpose into each other.
+- **zstd / `PNBC` wire container** — real magic-byte and optional-compression handling for the
+  container the spec already documented but nothing implemented. `rust/verifier/src/container.rs`'s
+  `decode_certificate_bytes`: no `PNBC` prefix -> whole file is plain JSON (every certificate written
+  before this change, including the checked-in `rust/prover/examples/**/*.pnbcert` fixtures and the
+  published `verify-v0.1.0` release artifacts); `PNBC` + zstd's own frame magic -> decompress; `PNBC`
+  + anything else -> plain JSON. `rust/verifier/src/main.rs`'s `verify`/`inspect` switched from
+  `fs::read_to_string` to raw-byte reads through this decoder. `rust/prover/src/container.rs` mirrors
+  the writer side (`encode_certificate_container`) rather than taking a dependency on
+  `penumbra-verify` at runtime, keeping the two crates independent outside of tests; `penumbra-prove
+  -o` now writes `PNBC`-prefixed plaintext by default and adds zstd with a new opt-in `--compress`
+  flag. Stdout output (no `-o`) is untouched — still plain JSON — since piping/inspecting a cert on
+  the terminal isn't the on-disk wire format's concern.
+- Fixed a stale compliance claim found while reading the spec: `docs/CERTIFICATE_FORMAT.md` said the
+  verifier was Apache-2.0; it's actually GPL-3.0-or-later since the Stage 7 license split (only the
+  spec/schema/`cert-schema` are Apache-2.0). Also updated the Wire format section to describe the
+  real auto-detection behavior instead of "Phase 2 may add zstd," and noted the DAG-reconvergence
+  behavior next to the proof-structure semantics.
+
+`cargo test --workspace` (40 tests), `cargo clippy --workspace --all-targets` (clean), and
+`cargo fmt --all -- --check` all green. Verified against the real compiled binaries, not just unit
+tests: proved the same position to both a plain and a `--compress`ed `.pnbcert`, confirmed the
+compressed file is smaller and both verify identically, and confirmed a pre-existing checked-in
+example cert with no `PNBC` prefix at all still verifies — "old certificates remain verifiable
+forever" holds in practice.
+
 **Next:** remaining Phase 2 backlog in `docs/ROADMAP.md` (Deferred section) — real calibration
-run, Fleet federation, Phase 2 certificate format. What would you like to tackle?
+run, Fleet work-unit federation, certificate signatures/attestation.

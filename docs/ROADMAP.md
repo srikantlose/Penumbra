@@ -1426,8 +1426,31 @@ accounts; a crates.io token) rather than on any remaining decision or code.
   present at all, and a tampered copy (`win` claim flipped onto a real draw) is correctly rejected
   by the live probe. No automated test hits the network (matches this repo's standing convention
   of not unit-testing real network calls); `category_to_wdl`'s pure string mapping is unit tested.
-- **Phase 2 items** (per CERTIFICATE_FORMAT.md): zstd container (`PNBC` magic), signatures /
-  attestation, work-unit federation ("Fleet"), transposition-aware win certs.
+- ~~**zstd container (`PNBC` magic) + transposition-aware win certs**~~ **Done 2026-07-17.**
+  `rust/verifier/src/container.rs` adds `decode_certificate_bytes`: no `PNBC` prefix -> read as
+  plain JSON exactly as before (every certificate written to date), `PNBC` + zstd frame magic ->
+  decompress, `PNBC` + anything else -> plain JSON. `rust/verifier/src/main.rs`'s `verify`/`inspect`
+  switched from `fs::read_to_string` to raw-byte reads through this decoder. `rust/prover/src/
+  container.rs` mirrors the writer (`encode_certificate_container`); `penumbra-prove -o` now
+  writes `PNBC`-prefixed plaintext by default and `PNBC` + zstd with the new `--compress` flag
+  (stdout output is untouched, still plain JSON, since `--compress` only affects file output).
+  Separately, `rust/prover/src/pns.rs`'s `emit()` now dedupes certificate nodes by zobrist: the PNS
+  search arena is a strict tree (every expansion gets a fresh node even when it transposes into a
+  position seen elsewhere), so without this a proof revisiting the same position from multiple
+  branches serialized that subtree once per occurrence. `emit` now caches zobrist -> emitted node
+  id and points every later occurrence's `child_id` at the first one instead of re-emitting a
+  duplicate, shrinking certificates for lines with real transpositions. This is a serialization-time
+  change only — the search itself is untouched, so it can't introduce the graph-history-interaction
+  unsoundness that merging transpositions mid-search is prone to. The verifier needed no changes:
+  `dfs_check_acyclic`'s `visited`/`rec_stack` split and `semantic.rs`'s `verify_node`'s global
+  `ctx.verified` memo already treat a shared node id referenced from multiple parents as a normal
+  DAG reconvergence, not a cycle. Verified against the real CLIs (not just unit tests): a plain and
+  a `--compress`ed certificate for the same position both verify identically, and a checked-in
+  pre-existing example cert with no `PNBC` prefix at all still verifies — confirming "old
+  certificates remain verifiable forever" holds in practice, not just in the spec.
+- **Remaining Phase 2 items** (per CERTIFICATE_FORMAT.md): signatures / attestation, work-unit
+  federation ("Fleet") — deferred pending a concrete multi-contributor scenario to design against;
+  no existing code/infra for either.
 - ~~**`missed_proofs` beyond the ≤8-men v1 scope**~~ **Done 2026-07-16.** The v1 gate skipped any
   parent position above 8 pieces before even enumerating its children -- but a `proofs` row isn't
   piece-count-bounded at all (a transposition into an already-proven fortress can happen at any
