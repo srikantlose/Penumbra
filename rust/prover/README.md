@@ -23,13 +23,19 @@ yet model.
 ## Usage
 
 ```
-penumbra-prove prove "<FEN>" [--side white|black] [-o out.pnbcert]
+penumbra-prove prove "<FEN>" [--side white|black] [-o out.pnbcert] [--compress]
                               [--max-nodes N] [--time-ms MS]
 ```
 
 `--side` defaults to the side to move. Without `-o`, the certificate is written
-to stdout; a one-line search summary (`proven=… nodes=… elapsed=…ms`) always
-goes to stderr. Exit code is 0 when a win is proved, 1 otherwise.
+to stdout as plain JSON; a one-line search summary (`proven=… nodes=… elapsed=…ms`)
+always goes to stderr. Exit code is 0 when a win is proved, 1 otherwise.
+
+With `-o`, the file is written as a `PNBC`-prefixed container (see
+[`CERTIFICATE_FORMAT.md`](../../docs/CERTIFICATE_FORMAT.md#wire-format)); add
+`--compress` to zstd-compress the payload inside that container. `penumbra-verify`
+auto-detects either form, and still reads certificates with no `PNBC` prefix at
+all (every one written before this container existed).
 
 ```sh
 # Morphy's mate-in-two: 1.Ra6! and every black reply is mated.

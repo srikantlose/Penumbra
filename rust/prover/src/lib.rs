@@ -1,9 +1,11 @@
 pub mod certificate;
+pub mod container;
 pub mod pns;
 pub mod tb;
 mod time;
 
 pub use certificate::Certificate;
+pub use container::encode_certificate_container;
 pub use pns::{ClaimValue, ProofNumberSearch, ProofSearchConfig, ProofSearchResult, ProveOutcome};
 pub use tb::TbOracle;
 

@@ -22,6 +22,7 @@ thiserror.workspace = true
 shakmaty = "0.26"
 shakmaty-syzygy = "0.24"
 clap = { version = "4.4", features = ["derive"] }
+zstd = "0.13"
 
 [dev-dependencies]
 penumbra-verify = { path = "../verifier" }

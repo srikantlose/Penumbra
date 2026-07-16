@@ -50,6 +50,13 @@ enum Commands {
       help = "Path to a Syzygy tablebase directory (enables tablebase leaves)"
     )]
     syzygy: Option<PathBuf>,
+
+    #[arg(
+      long,
+      default_value_t = false,
+      help = "zstd-compress the written certificate (only applies with -o; ignored for stdout)"
+    )]
+    compress: bool,
   },
 }
 
@@ -57,36 +64,26 @@ fn main() -> ExitCode {
   let cli = Cli::parse();
 
   match cli.command {
-    Commands::Prove {
-      fen,
-      side,
-      out,
-      max_nodes,
-      time_ms,
-      claim,
-      syzygy,
-    } => run_prove(
-      &fen,
-      side.as_deref(),
-      out.as_ref(),
-      max_nodes,
-      time_ms,
-      &claim,
-      syzygy,
-    ),
+    Commands::Prove { .. } => run_prove(cli.command),
   }
 }
 
-fn run_prove(
-  fen: &str,
-  side: Option<&str>,
-  out: Option<&PathBuf>,
-  max_nodes: usize,
-  time_ms: u64,
-  claim: &str,
-  syzygy: Option<PathBuf>,
-) -> ExitCode {
-  let claim_side = match side {
+fn run_prove(command: Commands) -> ExitCode {
+  let Commands::Prove {
+    fen,
+    side,
+    out,
+    max_nodes,
+    time_ms,
+    claim,
+    syzygy,
+    compress,
+  } = command;
+
+  if compress && out.is_none() {
+    eprintln!("--compress has no effect without -o; stdout output is always plain JSON");
+  }
+  let claim_side = match side.as_deref() {
     Some("white") => Some(Color::White),
     Some("black") => Some(Color::Black),
     Some(other) => {
@@ -96,7 +93,7 @@ fn run_prove(
     None => None,
   };
 
-  let claim_value = match claim {
+  let claim_value = match claim.as_str() {
     "win" => ClaimValue::Win,
     "at_least_draw" => ClaimValue::AtLeastDraw,
     other => {
@@ -113,7 +110,7 @@ fn run_prove(
   };
 
   let search = ProofNumberSearch::new(config);
-  let outcome = match search.prove(fen, claim_side) {
+  let outcome = match search.prove(&fen, claim_side) {
     Ok(outcome) => outcome,
     Err(e) => {
       eprintln!("Error: {e}");
@@ -138,7 +135,14 @@ fn run_prove(
   let json = cert.to_json_pretty();
   match out {
     Some(path) => {
-      if let Err(e) = fs::write(path, format!("{json}\n")) {
+      let bytes = match penumbra_prover::encode_certificate_container(&json, compress) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+          eprintln!("Error: could not encode certificate: {e}");
+          return ExitCode::FAILURE;
+        }
+      };
+      if let Err(e) = fs::write(&path, bytes) {
         eprintln!("Error: could not write {}: {e}", path.display());
         return ExitCode::FAILURE;
       }

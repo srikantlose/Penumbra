@@ -113,7 +113,8 @@ fn verify_certificate(
   path: &PathBuf,
   opts: &VerifyOptions,
 ) -> Result<bool, Box<dyn std::error::Error>> {
-  let content = fs::read_to_string(path)?;
+  let bytes = fs::read(path)?;
+  let content = penumbra_verify::decode_certificate_bytes(&bytes)?;
 
   let verifier = CertificateVerifier::load_from_json(&content)?;
   let report = verifier.verify_with(opts)?;
@@ -153,7 +154,8 @@ fn verify_certificate(
 }
 
 fn inspect_certificate(path: &PathBuf) -> Result<bool, Box<dyn std::error::Error>> {
-  let content = fs::read_to_string(path)?;
+  let bytes = fs::read(path)?;
+  let content = penumbra_verify::decode_certificate_bytes(&bytes)?;
 
   let verifier = CertificateVerifier::load_from_json(&content)?;
   let claim = verifier.get_claim();

@@ -77,3 +77,35 @@ fn invalid_fen_is_reported() {
   let err = search.prove("not a fen", None).unwrap_err();
   assert!(err.contains("FEN"), "unexpected error: {err}");
 }
+
+#[test]
+fn compressed_container_survives_the_full_pipeline() {
+  // Prove a certificate, write it exactly as `penumbra-prove -o ... --compress`
+  // would, then read it back exactly as `penumbra-verify` would, and confirm
+  // it still verifies -- the round trip a real user relies on.
+  let search = ProofNumberSearch::new(ProofSearchConfig::default());
+  let outcome = search
+    .prove("6k1/5ppp/8/8/8/8/8/R6K w - - 0 1", Some(Color::White))
+    .expect("position parses");
+  let cert = outcome
+    .certificate
+    .expect("proved search yields a certificate");
+  let json = cert.to_json_pretty();
+
+  let bytes =
+    penumbra_prover::encode_certificate_container(&json, true).expect("encodes to zstd container");
+  assert!(bytes.starts_with(b"PNBC"));
+  assert_ne!(
+    bytes[4..],
+    *json.as_bytes(),
+    "compressed payload isn't literal JSON"
+  );
+
+  let decoded =
+    penumbra_verify::decode_certificate_bytes(&bytes).expect("decodes the container back to JSON");
+  assert_eq!(decoded, json);
+
+  let verifier = CertificateVerifier::load_from_json(&decoded).expect("cert loads");
+  let report = verifier.verify().expect("verification runs");
+  assert!(report.valid, "errors: {:?}", report.errors);
+}
