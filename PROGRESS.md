@@ -667,5 +667,57 @@ in `docs/ROADMAP.md` — that file is the forward-looking plan; this section jus
 - Production deploy explicitly deferred by user choice — no real Hetzner/Cloudflare/R2 target
   exists yet; revisit when infrastructure accounts are ready.
 
-**Next:** Phase 2 backlog available in `docs/ROADMAP.md` (Deferred section) — real calibration run,
-Lichess OAuth, Fleet federation, Phase 2 certificate format, etc. What would you like to tackle?
+## Phase 2 (in progress)
+
+### ✅ `packages/db` seed script (2026-07-16)
+
+`package.json` had declared a `./seed` export with no `src/seed.ts` behind it since M0 — fixed:
+seeds a dev user, a dev API key (printed once), and a two-ply demo game, idempotent on rerun.
+Hand-rolls the demo game with `@penumbra/core` primitives rather than calling `importGame()` from
+`@penumbra/analysis`, since that package already depends on `@penumbra/db` and importing it back
+would invert the workspace dependency graph.
+
+### ✅ Lichess OAuth (PKCE) "connect account" (2026-07-16)
+
+Full connect/disconnect flow for personal Lichess import, using the Authorization Code + PKCE
+flow lichess.org supports without app registration (arbitrary `client_id`, no `client_secret`).
+Chosen from the Phase 2 backlog (`docs/ROADMAP.md` Deferred section).
+
+- `services/analysis/src/import/lichessOAuth.ts` — PKCE primitives (S256 verifier/challenge,
+  state) plus the real network calls: authorize-url builder, `POST https://lichess.org/api/token`
+  code exchange, `GET https://lichess.org/api/account`. Unit tested (pure functions only — the
+  network calls follow the existing `lichess.ts` precedent of no mocked-network tests).
+- `services/analysis/src/import/persist.ts` — `upsertLichessUser`, keyed on the `users` table's
+  `lichess_id` unique index that had been sitting ready since the schema was written.
+- `apps/api/src/lichessOAuth.ts` — AES-256-GCM encryption for `users.oauth_tokens` "at rest" per
+  the schema's own comment. `TOKEN_ENCRYPTION_KEY` has **no dev-fallback default** (unlike the
+  DB/Redis/Minio infra creds) since it protects a real bearer credential — throws inline the
+  first time a route needs it, matching the existing `PENUMBRA_API_KEY` precedent.
+- Two new BFF routes in `apps/api/src/routes/bff.ts`: `POST /bff/lichess/oauth/start` (generates
+  the PKCE pair + state, stashes the verifier in Redis keyed by state, 10-minute TTL, returns the
+  authorize URL) and `POST /bff/lichess/oauth/callback` (looks the verifier up by state —
+  single-use, doubles as CSRF binding since lichess echoes `state` back verbatim — exchanges the
+  code, fetches the account, encrypts the token, upserts the user).
+- `apps/web/src/lib/session.ts` — HMAC-SHA256 signed `pn_session` cookie (timing-safe compare),
+  carrying just `{userId, lichessUsername}` (no secrets, so no encryption needed, unlike the
+  stored OAuth token).
+- `apps/web/src/app/journey/connect/callback/route.ts` — the GET route handler lichess's redirect
+  actually lands on; exchanges the code server-side via the BFF, sets the session, redirects to
+  `/journey?connected=1` (or `?error=...`).
+- `/journey` (`page.tsx` + `JourneyForm.tsx`) — connect/disconnect controls in the existing locked
+  design system; the connected username prefills the existing manual-import input but stays
+  editable. **`/bff/import` itself is unchanged** — it already imports any public username
+  unauthenticated, so connecting an account is purely an identity convenience, not a new access
+  gate.
+- Lichess access tokens are long-lived (~1 year) with no refresh token support (confirmed via
+  lichess's own docs) — no refresh path was built, deliberately.
+
+**Verified live**, not just unit-tested: real `lichess.org` token-endpoint rejection of a
+fabricated code (genuine 400), real Redis TTL on the pending state, single-use/replay rejection
+on a reused `state`, the 401 API-key gate, and no stray rows left in `users` afterward. Full
+type-check/lint/test suites green with no regressions (`pnpm --filter @penumbra/api test` 25/25
+against live Postgres/Redis, `@penumbra/analysis` 65/65 incl. 6 new).
+
+**Next:** remaining Phase 2 backlog in `docs/ROADMAP.md` (Deferred section) — real calibration
+run, verifier `--tb-endpoint`, Fleet federation, Phase 2 certificate format, `missed_proofs`
+beyond ≤8 men. What would you like to tackle?

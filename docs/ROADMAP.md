@@ -1390,6 +1390,11 @@ accounts; a crates.io token) rather than on any remaining decision or code.
   fetched, prover `at_least_draw` + TB oracle + transposition terminals, verifier real Syzygy
   probing, 10 committed fortress certs (4 Tier A + 3 Tier B + 3 Tier C) all verifying clean.
   Milestone M2 is done. Next up per this roadmap is Stage 3 (`services/analysis` UCI worker).
+- **2026-07-16 — Redis over a client cookie for pending PKCE state:** the pending code_verifier
+  only needs to survive between `/bff/lichess/oauth/start` and lichess's own redirect back to
+  `/journey/connect/callback` — lichess echoes `state` verbatim, so looking that up in
+  `context.redis` (already wired) is sufficient and avoids adding a second, CSRF-relevant cookie
+  to `apps/web` purely to shuttle a value it never needs to read itself.
 
 ## Deferred / post-launch
 
@@ -1398,10 +1403,20 @@ accounts; a crates.io token) rather than on any remaining decision or code.
   (or calibrate the quick-tier fingerprint first); output = new `CalibrationData` for
   `packages/fog/src/calibration.ts` + the ~200-position QA gate from the methodology doc;
   replaces the placeholder in a minor release and drops the provisional labels.
-- **Lichess OAuth (PKCE, no app registration)** — "connect account" personal import; `users`
-  table is ready.
+- ~~**Lichess OAuth (PKCE, no app registration)**~~ **Done 2026-07-16.** "Connect account" flow
+  shipped: `services/analysis/src/import/lichessOAuth.ts` (PKCE + the lichess.org token/account
+  calls), two new BFF routes (`/bff/lichess/oauth/start` + `/callback`, pending-state in Redis,
+  keyed by state, single-use), AES-256-GCM token-at-rest encryption
+  (`apps/api/src/lichessOAuth.ts`, `TOKEN_ENCRYPTION_KEY`, no dev-fallback), and a signed session
+  cookie (`apps/web/src/lib/session.ts`) driving connect/disconnect controls on `/journey`. The
+  existing unauthenticated manual-username import path is unchanged — connecting is an identity
+  convenience (prefills the input), not a new privilege boundary, since `/bff/import` already
+  accepts any public username. Verified live against real `lichess.org` endpoints (real 400 on a
+  fake code, real Redis TTL, single-use replay rejection); no code path yet reads the stored
+  token back (nothing needs it while game export stays public/unauthenticated).
 - **Verifier `--tb-endpoint`** (Lichess 6-7-man network probing) — spec'd flag, deferred.
 - **Phase 2 items** (per CERTIFICATE_FORMAT.md): zstd container (`PNBC` magic), signatures /
   attestation, work-unit federation ("Fleet"), transposition-aware win certs.
 - **`missed_proofs` beyond the ≤8-men v1 scope.**
-- **`packages/db` seed script** (`./seed` export exists in package.json but no source).
+- ~~**`packages/db` seed script**~~ **Done 2026-07-16** (`85d9b99`) — `packages/db/src/seed.ts`
+  seeds a dev user/api-key/demo game, idempotent.
