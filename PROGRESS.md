@@ -753,6 +753,36 @@ warnings), `cargo fmt --all -- --check` all green. No automated test hits the ne
 this repo's standing convention of not unit-testing real network calls (`category_to_wdl`'s pure
 string mapping is unit tested instead).
 
+### ✅ `missed_proofs` beyond the ≤8-men v1 scope (2026-07-16)
+
+The v1 detector (Stage 4) skipped every parent position above 8 pieces before even enumerating
+its legal children. That bound was actually redundant for the tablebase-fallback path (a single
+move can only reduce piece count by one, so a parent above 8 pieces can never reach a ≤7-man
+TB-covered child anyway) — but it was wrong for the `proofs`-table path, since a proof certificate
+isn't piece-count-bounded at all (a transposition into an already-proven fortress can happen at
+any material count). The gate was silently skipping real misses outside the endgame.
+
+- `services/analysis/src/pipeline/proofEntry.ts` — removed `MISSED_PROOF_MAX_PIECES` and the
+  parent-side piece-count check entirely. `detectMissedProofs`'s injected predicate changed from
+  "check one child's fen, called once per legal move" to "check every legal child at once, called
+  once per ply" (`findProvenWinningMoves(children, mover) => Promise<Set<uci>>`) — both to make
+  the wider scope's query volume tractable and because the production implementation needs the
+  whole ply's candidates in hand to batch its lookup anyway.
+- `services/analysis/src/pipeline/analyzeGame.ts`'s new `findProvenWinningMoves` backs it with two
+  batched queries per ply (`positions` and `proofs`, both via `drizzle-orm`'s `inArray` — the first
+  use of that operator in this codebase) plus a tablebase fallback restricted to positions within
+  `SYZYGY_MAX_PIECES`. Net effect: one query per ply for the common case (no proof/TB match at
+  all), not one query per candidate move — the naive fix (just delete the gate, keep the old
+  per-child round trip) would have made every opening/middlegame ply's wider branching factor cost
+  a DB round trip per move, which the original ≤8-men v1 scope was specifically avoiding.
+- `services/analysis/src/index.ts` — dropped the now-gone `MISSED_PROOF_MAX_PIECES` export, added
+  `ChildMove` (needed by test fixtures constructing the new batch-shaped mock predicate).
+
+`pnpm build`, `pnpm test` (11/11 packages, 110/110 tests — including `proofEntry.test.ts`'s 6
+tests, updated for the new predicate shape), and `pnpm --filter @penumbra/analysis type-check` all
+green. No network-dependent behavior changed (still gated by `ensureTablebaseProbe`'s own
+`SYZYGY_MAX_PIECES` check), so no new live-network verification was needed beyond the existing
+tablebase test coverage.
+
 **Next:** remaining Phase 2 backlog in `docs/ROADMAP.md` (Deferred section) — real calibration
-run, Fleet federation, Phase 2 certificate format, `missed_proofs` beyond ≤8 men. What would you
-like to tackle?
+run, Fleet federation, Phase 2 certificate format. What would you like to tackle?

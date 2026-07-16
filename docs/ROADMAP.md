@@ -1428,6 +1428,17 @@ accounts; a crates.io token) rather than on any remaining decision or code.
   of not unit-testing real network calls); `category_to_wdl`'s pure string mapping is unit tested.
 - **Phase 2 items** (per CERTIFICATE_FORMAT.md): zstd container (`PNBC` magic), signatures /
   attestation, work-unit federation ("Fleet"), transposition-aware win certs.
-- **`missed_proofs` beyond the ≤8-men v1 scope.**
+- ~~**`missed_proofs` beyond the ≤8-men v1 scope**~~ **Done 2026-07-16.** The v1 gate skipped any
+  parent position above 8 pieces before even enumerating its children -- but a `proofs` row isn't
+  piece-count-bounded at all (a transposition into an already-proven fortress can happen at any
+  material count), so that cutoff was silently missing real misses outside the endgame. Removed
+  the parent-side gate entirely; `detectMissedProofs` (`services/analysis/src/pipeline/proofEntry.ts`)
+  now calls its predicate once per ply with every legal child in one batch instead of once per
+  child gated by piece count. `analyzeGame.ts`'s `findProvenWinningMoves` backs it with two batched
+  queries per ply (`positions`/`proofs` via `inArray`, matching this repo's first use of that
+  operator) plus a tablebase fallback restricted to `SYZYGY_MAX_PIECES` candidates -- so this never
+  adds one DB round trip per candidate move (which would have been the naive fix, and expensive
+  during the opening/middlegame's wider branching factor), and never probes the network for
+  material outside TB range. `MISSED_PROOF_MAX_PIECES` is gone; nothing else referenced it.
 - ~~**`packages/db` seed script**~~ **Done 2026-07-16** (`85d9b99`) — `packages/db/src/seed.ts`
   seeds a dev user/api-key/demo game, idempotent.
