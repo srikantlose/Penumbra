@@ -25,6 +25,8 @@
 //! requirement for `win` claims falls out for free. `at_least_draw` proofs
 //! are explicitly allowed to close cycles via the `transposition` terminal.
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use shakmaty::fen::Fen;
 use shakmaty::zobrist::{Zobrist64, ZobristHash};
@@ -108,6 +110,7 @@ enum Term {
   Transposition,
 }
 
+#[derive(Clone)]
 struct PnsNode {
   pos: Chess,
   zobrist: String,
@@ -399,7 +402,8 @@ impl<'a> Solver<'a> {
   fn build_certificate(&self, fen: &str, side: Color) -> Certificate {
     let mut nodes = Vec::new();
     let mut next_id = 1usize;
-    let root_id = self.emit(0, &mut nodes, &mut next_id);
+    let mut emitted = HashMap::new();
+    let root_id = self.emit(0, &mut nodes, &mut next_id, &mut emitted);
 
     let has_tablebase_terminal = nodes.iter().any(|n| {
       n.terminal
@@ -432,8 +436,29 @@ impl<'a> Solver<'a> {
 
   /// Emit the proved subtree rooted at `idx` into `nodes`, returning its id.
   /// OR nodes emit one proved move; AND nodes emit every legal move (all proved).
-  fn emit(&self, idx: usize, nodes: &mut Vec<Node>, next_id: &mut usize) -> String {
+  ///
+  /// `emitted` maps zobrist -> already-assigned node id: the search arena is a
+  /// strict tree (every expansion gets a fresh node, even when it transposes
+  /// into a position seen elsewhere), so without this cache a proof that
+  /// revisits the same position from multiple branches would serialize that
+  /// subtree once per occurrence. Two arena nodes sharing a zobrist are the
+  /// same chess position, so whichever is emitted first is a valid stand-in
+  /// for every later occurrence -- we just point subsequent parents at it
+  /// instead of re-emitting a duplicate. This is a serialization-time dedup
+  /// only; it doesn't merge anything during search, so it can't introduce the
+  /// graph-history-interaction bugs that merging transpositions mid-search is
+  /// prone to.
+  fn emit(
+    &self,
+    idx: usize,
+    nodes: &mut Vec<Node>,
+    next_id: &mut usize,
+    emitted: &mut HashMap<String, String>,
+  ) -> String {
     let node = &self.arena[idx];
+    if let Some(existing_id) = emitted.get(&node.zobrist) {
+      return existing_id.clone();
+    }
     let id = if idx == 0 {
       "root".to_string()
     } else {
@@ -441,6 +466,7 @@ impl<'a> Solver<'a> {
       *next_id += 1;
       s
     };
+    emitted.insert(node.zobrist.clone(), id.clone());
     let zobrist = node.zobrist.clone();
     let to_move = color_name(node.pos.turn()).to_string();
 
@@ -476,7 +502,7 @@ impl<'a> Solver<'a> {
         .iter()
         .position(|&c| self.arena[c].pn == 0)
         .expect("proved OR node has a proved child");
-      let child_id = self.emit(node.children[choice], nodes, next_id);
+      let child_id = self.emit(node.children[choice], nodes, next_id, emitted);
       nodes.push(Node {
         id: id.clone(),
         zobrist,
@@ -493,7 +519,7 @@ impl<'a> Solver<'a> {
     } else {
       let mut edges = Vec::with_capacity(node.children.len());
       for (i, &child) in node.children.iter().enumerate() {
-        let child_id = self.emit(child, nodes, next_id);
+        let child_id = self.emit(child, nodes, next_id, emitted);
         edges.push(MoveEdge {
           uci: node.moves[i].to_uci(CastlingMode::Standard).to_string(),
           child_id,
@@ -545,4 +571,67 @@ fn sat_sum<I: Iterator<Item = u32>>(iter: I) -> u32 {
     }
   }
   sum as u32
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  /// Two different replies from the root that transpose into the same
+  /// position should collapse into one shared node in the emitted
+  /// certificate, not two duplicated subtrees.
+  #[test]
+  fn emit_dedupes_transposing_children() {
+    let root_pos = Chess::default();
+    let mut legal = root_pos.legal_moves().into_iter();
+    let mv_a = legal.next().expect("start position has legal moves");
+    let mv_b = legal
+      .next()
+      .expect("start position has a second legal move");
+
+    let shared_zobrist = "0xdeadbeefdeadbeef".to_string();
+    let child = PnsNode {
+      pos: root_pos.clone(),
+      zobrist: shared_zobrist.clone(),
+      is_or: true,
+      pn: 0,
+      dn: INF,
+      terminal: Some(Term::CheckmateWin),
+      children: Vec::new(),
+      moves: Vec::new(),
+      parent: Some(0),
+    };
+    let root = PnsNode {
+      pos: root_pos.clone(),
+      zobrist: zobrist_hex(&root_pos),
+      is_or: false,
+      pn: 0,
+      dn: INF,
+      terminal: None,
+      children: vec![1, 2],
+      moves: vec![mv_a.clone(), mv_b.clone()],
+      parent: None,
+    };
+
+    let config = ProofSearchConfig::default();
+    let solver = Solver {
+      arena: vec![root, child.clone(), child],
+      side: Color::White,
+      config: &config,
+      tb: None,
+    };
+
+    let cert = solver.build_certificate("startpos", Color::White);
+
+    // Without dedup this would be 3 (root + one terminal per child); with it,
+    // both transposing children collapse into a single emitted node.
+    assert_eq!(cert.nodes.len(), 2);
+    let root_node = cert
+      .nodes
+      .iter()
+      .find(|n| n.id == cert.root_id)
+      .expect("root node present");
+    assert_eq!(root_node.moves.len(), 2);
+    assert_eq!(root_node.moves[0].child_id, root_node.moves[1].child_id);
+  }
 }
