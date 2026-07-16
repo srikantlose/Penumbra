@@ -45,7 +45,10 @@ export default async function PositionDetailPage({ params }: { params: Promise<{
           </div>
           <div className="flex justify-between gap-2">
             <span>Occurrences:</span>
-            <span>{position.provenance.occurrenceCount.toLocaleString()} games</span>
+            <span>
+              {position.provenance.occurrenceCount.toLocaleString()}{' '}
+              {position.provenance.occurrenceCount === 1 ? 'occurrence' : 'occurrences'}
+            </span>
           </div>
           <div className="flex justify-between gap-2">
             <span>First seen:</span>

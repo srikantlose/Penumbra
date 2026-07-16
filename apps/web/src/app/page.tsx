@@ -53,9 +53,9 @@ export default async function HomePage() {
               style={{ width: `${gaugePercent ?? 0}%` }}
             />
             <div className="relative z-10 w-full flex justify-between font-data-mono text-data-mono text-black mix-blend-difference">
-              <span className="text-white">0.00</span>
-              <span className="text-white">{gaugePercent === null ? 'N/A' : `${gaugePercent.toFixed(2)}%`}</span>
-              <span className="text-white">100.00</span>
+              <span className="text-white">0</span>
+              <span className="text-white">{gaugePercent === null ? 'N/A' : `${gaugePercent}/100`}</span>
+              <span className="text-white">100</span>
             </div>
           </div>
           <p className="font-data-mono text-data-mono text-white text-sm uppercase">
