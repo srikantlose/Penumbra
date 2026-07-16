@@ -64,8 +64,8 @@ export { importGame, type ImportGameResult } from './import/importGame.js';
 export {
   detectProofEntryPly,
   detectMissedProofs,
-  MISSED_PROOF_MAX_PIECES,
   type AnalyzedPosition,
+  type ChildMove,
   type MissedProofEntry,
 } from './pipeline/proofEntry.js';
 export { probeTablebase, parseTablebaseResponse, type TablebaseProbeResult } from './tablebase/lichess.js';

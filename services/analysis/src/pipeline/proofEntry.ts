@@ -3,11 +3,6 @@ import { Chess } from 'chessops/chess';
 import { makeUci } from 'chessops/util';
 import type { Move, Role } from 'chessops/types';
 
-// v1 scope for missed-proof detection (docs/ROADMAP.md Stage 4): bounds
-// child-position enumeration to the tablebase boundary the check actually
-// cares about. Deeper missed proofs are out of scope until Phase 2.
-export const MISSED_PROOF_MAX_PIECES = 8;
-
 export interface AnalyzedPosition {
   ply: number;
   positionId: number;
@@ -56,7 +51,7 @@ function isBackRank(square: number, color: 'white' | 'black'): boolean {
   return color === 'white' ? rank === 7 : rank === 0;
 }
 
-interface ChildMove {
+export interface ChildMove {
   uci: string;
   fen: string;
 }
@@ -87,43 +82,40 @@ function enumerateChildMoves(fen: string): ChildMove[] {
 }
 
 /**
- * v1 scope (docs/ROADMAP.md Stage 4): for each position with piece count <=
- * MISSED_PROOF_MAX_PIECES, checks whether some legal move leads to a child
- * already proven as a win for the side to move (per the injected
- * predicate), while the move actually played does not. `ply` anchors to the
- * position where the choice existed (before the move); `uci` is one such
- * missed winning move -- not necessarily the only one, and not the move
- * that was actually played.
+ * For each ply, checks whether some legal move leads to a child already
+ * proven as a win for the side to move, while the move actually played does
+ * not. `ply` anchors to the position where the choice existed (before the
+ * move); `uci` is one such missed winning move -- not necessarily the only
+ * one, and not the move that was actually played.
+ *
+ * Unlike proof-entry detection, this isn't bounded to a tablebase-adjacent
+ * piece count: a `proofs` row can apply to a position at any material count
+ * (e.g. a transposition into an already-proven fortress), so a parent-side
+ * piece-count cutoff would silently miss those. The predicate is called once
+ * per ply with every legal child in one batch rather than once per child, so
+ * the caller can look all of them up in a single query instead of one round
+ * trip per candidate move -- see analyzeGame.ts's findProvenWinningMoves.
  */
 export async function detectMissedProofs(
   positions: AnalyzedPosition[],
-  isProvenWinForMover: (fen: string, mover: 'white' | 'black') => Promise<boolean>
+  findProvenWinningMoves: (children: ChildMove[], mover: 'white' | 'black') => Promise<Set<string>>
 ): Promise<MissedProofEntry[]> {
   const missed: MissedProofEntry[] = [];
 
   for (let i = 0; i < positions.length - 1; i++) {
     const position = positions[i];
-    if (position.pieceCount > MISSED_PROOF_MAX_PIECES) continue;
-
     const mover = moverColorFromEpd(position.epd);
     const fen = epdToFen(position.epd);
     const playedUci = positions[i + 1].uci;
 
-    let winningAlternative: string | null = null;
-    let playedWasWinning = false;
+    const children = enumerateChildMoves(fen);
+    if (children.length === 0) continue;
 
-    for (const child of enumerateChildMoves(fen)) {
-      if (!(await isProvenWinForMover(child.fen, mover))) continue;
-      if (child.uci === playedUci) {
-        playedWasWinning = true;
-        break;
-      }
-      winningAlternative ??= child.uci;
-    }
+    const winningUcis = await findProvenWinningMoves(children, mover);
+    if (winningUcis.size === 0 || winningUcis.has(playedUci)) continue;
 
-    if (!playedWasWinning && winningAlternative) {
-      missed.push({ ply: position.ply, uci: winningAlternative });
-    }
+    const winningAlternative = children.find((child) => winningUcis.has(child.uci));
+    if (winningAlternative) missed.push({ ply: position.ply, uci: winningAlternative.uci });
   }
 
   return missed;

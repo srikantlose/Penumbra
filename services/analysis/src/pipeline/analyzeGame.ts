@@ -1,9 +1,9 @@
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, inArray } from 'drizzle-orm';
 import { QueueEvents } from 'bullmq';
 import { parseFen } from 'chessops/fen';
 import { Chess } from 'chessops/chess';
 import { normalizeEPD, TruthStatus } from '@penumbra/core';
-import { schema, isPositionProven, type Database } from '@penumbra/db';
+import { schema, isPositionProven, SYZYGY_MAX_PIECES, type Database } from '@penumbra/db';
 import type { Tier as EngineTier } from '../engines/config.js';
 import { computeFingerprintForTier } from '../fingerprint.js';
 import {
@@ -12,7 +12,13 @@ import {
   enqueueAnalyzePosition,
   queueNameForTier,
 } from '../queue/queues.js';
-import { detectMissedProofs, detectProofEntryPly, type AnalyzedPosition, type MissedProofEntry } from './proofEntry.js';
+import {
+  detectMissedProofs,
+  detectProofEntryPly,
+  type AnalyzedPosition,
+  type ChildMove,
+  type MissedProofEntry,
+} from './proofEntry.js';
 import { ensureTablebaseProbe } from '../tablebase/populate.js';
 
 // analyses.tier speaks the game-analysis vocabulary ('quick' | 'deep'), not
@@ -163,7 +169,7 @@ export async function analyzeGame(db: Database, input: AnalyzeGameInput): Promis
         if (epd) await ensureTablebaseProbe(db, positionId, epdToFen(epd), pieceCount);
         return isPositionProven(db, positionId, pieceCount);
       }),
-      detectMissedProofs(positions, (fen, mover) => isProvenWinForMover(db, fen, mover)),
+      detectMissedProofs(positions, (children, mover) => findProvenWinningMoves(db, children, mover)),
     ]);
 
     await db
@@ -248,36 +254,77 @@ function hasLegalMoves(epd: string): boolean {
   return posResult.value.hasDests();
 }
 
-async function isProvenWinForMover(db: Database, fen: string, mover: 'white' | 'black'): Promise<boolean> {
-  const epd = normalizeEPD(fen);
-  const [position] = await db
-    .select({ id: schema.positions.id, pieceCount: schema.positions.pieceCount })
-    .from(schema.positions)
-    .where(eq(schema.positions.epd, epd))
-    .limit(1);
-  if (!position) return false;
+// Backs detectMissedProofs' per-ply batch predicate. Deliberately not
+// bounded by piece count on the parent side -- a `proofs` row can apply at
+// any material count (e.g. a transposition into an already-proven
+// fortress), so the only piece-count cutoff that belongs here is
+// ensureTablebaseProbe's own internal SYZYGY_MAX_PIECES check, which keeps
+// this from ever issuing a network probe for a child outside TB coverage.
+// Batches both the positions/proofs lookups and the tb_probes lookup into
+// one query each (per ply) instead of one round trip per candidate move,
+// since a single ply's legal moves can otherwise number in the dozens
+// during the opening/middlegame.
+async function findProvenWinningMoves(
+  db: Database,
+  children: ChildMove[],
+  mover: 'white' | 'black'
+): Promise<Set<string>> {
+  const ucisByEpd = new Map<string, string[]>();
+  for (const child of children) {
+    const epd = normalizeEPD(child.fen);
+    const ucis = ucisByEpd.get(epd);
+    if (ucis) ucis.push(child.uci);
+    else ucisByEpd.set(epd, [child.uci]);
+  }
+  const epds = [...ucisByEpd.keys()];
 
-  const [proof] = await db
-    .select({ value: schema.proofs.value, claim: schema.proofs.claim })
+  const positionRows = await db
+    .select({ id: schema.positions.id, epd: schema.positions.epd, pieceCount: schema.positions.pieceCount })
+    .from(schema.positions)
+    .where(inArray(schema.positions.epd, epds));
+  if (positionRows.length === 0) return new Set();
+
+  const epdById = new Map(positionRows.map((row) => [row.id, row.epd]));
+  const winningEpds = new Set<string>();
+  const provenIds = new Set<number>();
+
+  const proofRows = await db
+    .select({ positionId: schema.proofs.positionId, value: schema.proofs.value, claim: schema.proofs.claim })
     .from(schema.proofs)
-    .where(eq(schema.proofs.positionId, position.id))
-    .limit(1);
-  if (proof) {
-    const claim = proof.claim as { side?: string };
-    if (proof.value === 'win' && claim.side === mover) return true;
+    .where(inArray(schema.proofs.positionId, positionRows.map((row) => row.id)));
+  for (const row of proofRows) {
+    const claim = row.claim as { side?: string };
+    if (row.value !== 'win' || claim.side !== mover) continue;
+    provenIds.add(row.positionId);
+    const epd = epdById.get(row.positionId);
+    if (epd) winningEpds.add(epd);
   }
 
-  // Fall back to a tablebase-cache-backed win (probing Lichess on cache
-  // miss). wdlW/wdlL are stored White-perspective, so "mover wins" reads
-  // wdlW for White or wdlL for Black.
-  await ensureTablebaseProbe(db, position.id, fen, position.pieceCount);
-  const [tbProbe] = await db
-    .select({ wdlW: schema.tbProbes.wdlW, wdlL: schema.tbProbes.wdlL })
-    .from(schema.tbProbes)
-    .where(eq(schema.tbProbes.positionId, position.id))
-    .limit(1);
-  if (!tbProbe) return false;
+  // Tablebase fallback, only for candidates not already settled by a proof
+  // and within TB coverage -- ensureTablebaseProbe no-ops above
+  // SYZYGY_MAX_PIECES, so this never probes the network for material
+  // outside its range.
+  const tbCandidates = positionRows.filter((row) => !provenIds.has(row.id) && row.pieceCount <= SYZYGY_MAX_PIECES);
+  if (tbCandidates.length > 0) {
+    const tbCandidateIds = tbCandidates.map((row) => row.id);
+    await Promise.all(tbCandidates.map((row) => ensureTablebaseProbe(db, row.id, epdToFen(row.epd), row.pieceCount)));
 
-  const moverWins = mover === 'white' ? tbProbe.wdlW : tbProbe.wdlL;
-  return (moverWins ?? 0) > 0;
+    const tbRows = await db
+      .select({ positionId: schema.tbProbes.positionId, wdlW: schema.tbProbes.wdlW, wdlL: schema.tbProbes.wdlL })
+      .from(schema.tbProbes)
+      .where(inArray(schema.tbProbes.positionId, tbCandidateIds));
+    for (const row of tbRows) {
+      const moverWins = mover === 'white' ? row.wdlW : row.wdlL;
+      if ((moverWins ?? 0) <= 0) continue;
+      const epd = epdById.get(row.positionId);
+      if (epd) winningEpds.add(epd);
+    }
+  }
+
+  const winningUcis = new Set<string>();
+  for (const [epd, ucis] of ucisByEpd) {
+    if (!winningEpds.has(epd)) continue;
+    for (const uci of ucis) winningUcis.add(uci);
+  }
+  return winningUcis;
 }
