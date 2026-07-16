@@ -149,9 +149,9 @@ defects were fixed (full detail and rationale in `docs/ROADMAP.md` §Stage 1):
 
 ## In-progress and next steps
 
-### 🟡 M2: Prover + Fortress seeds (3 weeks, PNS core delivered)
+### ✅ M2: Prover + Fortress seeds (3 weeks, complete)
 
-**Delivered (2026-07-08):**
+**Forced-mate WIN certificates delivered (2026-07-08):**
 - Real proof-number search over AND/OR trees in `rust/prover` (`src/pns.rs`),
   replacing the stub. OR nodes (claiming side) proved if any child wins; AND
   nodes (opponent) proved only if every legal reply is covered. Terminals are
@@ -163,7 +163,7 @@ defects were fixed (full detail and rationale in `docs/ROADMAP.md` §Stage 1):
   OR nodes emit the one winning move, AND nodes emit all replies, leaves emit
   checkmate terminals. Certificates are acyclic by construction (a forced mate
   makes monotonic progress), satisfying the verifier's `win` acyclicity rule.
-- Round-trip integration test (`tests/prove_and_verify.rs`, 6 tests): proves a
+- Round-trip integration test (`tests/prove_and_verify.rs`): proves a
   set of known mates, serializes each certificate, and feeds it straight through
   `penumbra-verify`, asserting the report is valid. Includes a black-to-move
   case and negative cases (dead draw → no certificate; bad FEN → error).
@@ -171,16 +171,27 @@ defects were fixed (full detail and rationale in `docs/ROADMAP.md` §Stage 1):
   Morphy's mate-in-2 (one AND node covering all 7 black replies, 16 nodes /
   7 terminals), and a two-rook mate — each verifies clean.
 
-**Scope note:** the deliverable is **self-contained forced-mate WIN
-certificates** — a genuine end-to-end prove→verify loop. This is the core PNS
-milestone. The remaining M2 items below are follow-on because they need
-inputs the search doesn't yet model:
-
-**Still needed:**
-1. Fortress / `at_least_draw` certificates — need Syzygy tablebase terminals or
-   repetition/50-move closure (the search currently only bottoms out at mates)
-2. Syzygy tablebase probing in both prover (as leaf oracle) and verifier
-3. Generate ~10 fortress seed certificates (min 5) and verify against Syzygy
+**Fortress / `at_least_draw` certificates delivered (2026-07-08):** the search
+now also proves `at_least_draw`, closing loops via `Term::Transposition`
+(a move back to a position already on the current path becomes a terminal
+instead of a disproof under this claim, since a defender confined to a finite
+non-losing set forever is sufficient for a draw). Syzygy tablebase probing
+added as a leaf oracle on both sides: `rust/prover/src/tb.rs`'s `TbOracle` (via
+`shakmaty-syzygy`) and `rust/verifier/src/tb.rs`, wired through
+`TablebasePolicy::Syzygy`/`Forbid`/`Assume` so verification fails closed by
+default with no tablebase source configured. Ten fortress seed certificates in
+`rust/prover/examples/fortress/` span three tiers (`docs/ROADMAP.md` Stage
+2.4) — Tier A (root resolves directly against a tablebase or stalemate), Tier
+B (shallow trees liquidating into the tables), Tier C (genuine 8–10 man
+repetition-closed fortresses beyond Lichess's 7-man range, cross-validated
+against its per-move heuristic instead) — every candidate FEN checked against
+the real Lichess tablebase endpoint before proving; see
+`rust/prover/examples/fortress/README.md` for the full FEN/provenance table.
+`tests/fortress_roundtrip.rs` exercises both the positive (`--syzygy` present
+→ valid) and negative (`--syzygy` absent → fails closed) paths against the
+real 3-4-5 Syzygy tables, skipping rather than failing when they're not
+present on disk (same convention as any other environment-dependent
+integration test).
 
 ### ✅ M4: Game import + analysis (complete, live acceptance gate passed)
 
@@ -509,7 +520,7 @@ from the existing 445+ imported positions.
 **Remaining for M6 in full:** verifier binary release (crates.io + GitHub releases), production
 deploy. Both are launch-stage (`docs/ROADMAP.md` Stage 7), not blocking Stage 6's web wiring.
 
-### 🟡 Stage 7 (launch, `docs/ROADMAP.md`): license split done, release shipped, deploy pending
+### 🟡 Stage 7 (launch, `docs/ROADMAP.md`): everything shipped except production deploy (no infra target yet, by user choice)
 
 - **License split (done):** `shakmaty`/`shakmaty-syzygy` are GPL-3.0-or-later, so `penumbra-verify`
   and `penumbra-prover` (both link them directly) can't be Apache-2.0 as the docs previously
@@ -519,12 +530,11 @@ deploy. Both are launch-stage (`docs/ROADMAP.md` Stage 7), not blocking Stage 6'
   `cargo publish`), added `LICENSE` files, corrected `docs/DEVELOPMENT.md`, and wrote the
   previously-referenced-but-missing `docs/gpl-compliance.md` (GPL rationale, the
   engines-as-separate-processes boundary, source-availability story).
-- **crates.io publish (prepped, not yet published):** `rust/verifier/Cargo.toml` has the metadata
-  crates.io requires (`repository`, `readme`, `keywords`, `categories`) and a new `README.md`;
-  `cargo publish -p penumbra-verify --dry-run` packages and compiles cleanly from the tarball. The
-  actual `cargo publish` needs the account owner's own crates.io API token (`cargo login`), which
-  isn't something available in this environment — this is the one remaining task blocked purely on
-  a credential, not a decision.
+- **crates.io publish (done and live):** `rust/verifier/Cargo.toml` has the metadata crates.io
+  requires (`repository`, `readme`, `keywords`, `categories`) and a `README.md`. `penumbra-verify
+  v0.1.0` is published and live on the registry (confirmed via the sparse index,
+  `pubtime: 2026-07-11T18:11:06Z`, not yanked) — the account owner ran `cargo login` + `cargo
+  publish` themselves, since that step needs their own API token.
 - **GitHub release (done and verified live):** `.github/workflows/release.yml` builds
   `penumbra-verify --release` across `windows-msvc`, `linux-gnu`, `macos-arm64` on any `verify-v*`
   tag push, bundling each archive with the two semantic golden certs, a fortress cert, and a verify
@@ -568,7 +578,7 @@ penumbra/
 │  └─ config/       # ✅ shared tsconfig, eslint
 ├─ rust/
 │  ├─ verifier/     # ✅ penumbra-verify CLI
-│  └─ prover/       # 🟡 penumbra-prove CLI: PNS forced-mate certs (fortress TBD)
+│  └─ prover/       # ✅ penumbra-prove CLI: PNS forced-mate + fortress certs
 ├─ docs/            # ✅ specs, methodology
 └─ infra/           # ✅ docker-compose
 ```
