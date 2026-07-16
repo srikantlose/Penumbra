@@ -2,12 +2,13 @@
 
 Chess platform built around mapping the solved frontier of chess. The Fog Index measures unsolvedness; we attempt to push the boundary outward through AI engines and distributed community compute.
 
-## Quick start — Local development (5 minutes)
+## Quick start — Local development
+
+Postgres, Redis, and MinIO all run in Docker via `infra/docker-compose.yml` — you do **not** need a native PostgreSQL install. The compose stack creates the `penumbra` database with user/password/db all `penumbra`, and the apps default to those credentials, so there's nothing to configure for a basic run.
 
 ### Prerequisites
 - **Node.js** ≥ 18, **pnpm** ≥ 8
-- **PostgreSQL** running locally (database `penumbra`, default credentials)
-- **Docker** (optional; see below)
+- **Docker Desktop** (provides Postgres, Redis, MinIO)
 - **Rust** (only if working on `rust/verifier` or `rust/prover`)
 
 ### Step 1: Install dependencies
@@ -15,78 +16,70 @@ Chess platform built around mapping the solved frontier of chess. The Fog Index 
 pnpm install
 ```
 
-### Step 2: Start the database and services
-**Option A: Using Docker (recommended)**
+### Step 2: Start the backing services (Postgres, Redis, MinIO)
 ```bash
 docker-compose -f infra/docker-compose.yml up -d
 ```
 
-**Option B: Manual PostgreSQL setup**
+Verify Postgres is healthy (all should report `Up ... (healthy)`):
 ```bash
-# Create database (if not exists)
-createdb penumbra
-
-# Verify connection
-psql -U postgres -d penumbra -c "SELECT 1"
+docker ps
 ```
 
-Set up `.env.local` files:
+The container is `penumbra-postgres` on `localhost:5432`, credentials `penumbra` / `penumbra`, database `penumbra`. To open a psql shell inside it:
 ```bash
-# apps/api/.env.local
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/penumbra
-REDIS_URL=redis://localhost:6379
-```
-
-```bash
-# apps/web/.env.local
-NEXT_PUBLIC_API_URL=http://localhost:3000
+docker exec -it -e PGPASSWORD=penumbra penumbra-postgres psql -U penumbra -d penumbra
 ```
 
 ### Step 3: Run database migrations
 ```bash
 pnpm db:migrate
-pnpm db:smoke  # verify the connection works
+pnpm db:smoke   # verify the connection works
 ```
 
-### Step 4: Start the dev servers (two separate terminals)
+### Step 4: Build the workspace (the API `dev` script runs compiled output)
+```bash
+pnpm build
+```
 
-**Terminal 1 — API server (Fastify, port 3000)**
+### Step 5: Start the dev servers (two separate terminals)
+
+**Terminal 1 — API server (Fastify, port 3001)**
 ```bash
 pnpm --filter @penumbra/api dev
 ```
+> The API reads config straight from `process.env` (no `.env.local` loader). `DATABASE_URL`, `PORT`, `WEB_ORIGIN`, and the `MINIO_*` vars all have working local-dev defaults, so nothing needs to be set for a basic run. Only the "connect Lichess account" flow needs a real `TOKEN_ENCRYPTION_KEY` exported into the shell — see `apps/api/.env.local.example`.
 
-**Terminal 2 — Web app (Next.js, port 3001)**
+**Terminal 2 — Web app (Next.js, port 3000)**
 ```bash
 pnpm --filter @penumbra/web dev
 ```
+> The web app reads `apps/web/.env.local`. Copy `apps/web/.env.local.example` to `.env.local`; `NEXT_PUBLIC_API_URL` should point at the API on `http://localhost:3001`.
 
-Open **http://localhost:3001** in your browser.
+Open **http://localhost:3000** in your browser.
 
 ### Troubleshooting
 
+**`psql` prompts for a password and rejects everything**
+- You're probably hitting the Docker container, whose superuser is `penumbra`, **not** `postgres`. Connect with `-U penumbra` (password `penumbra`), or use the `docker exec` command above.
+
 **"Cannot connect to database"**
-- Verify PostgreSQL is running: `psql -U postgres -d penumbra -c "SELECT 1"`
-- Check `DATABASE_URL` in `apps/api/.env.local`
+- Confirm the container is up and healthy: `docker ps`
+- If the port looks taken, check what owns 5432 — Docker/WSL port proxies can shadow a native Postgres install.
 
-**"Port 3000 already in use"**
-- Change the port in `apps/api/src/server.ts` or kill the existing process
-
-**"Cannot find module"**
-- Run `pnpm install` again
-- Clear node_modules: `pnpm clean`
+**"Cannot find module" / stale build**
+- Re-run `pnpm install`, then `pnpm build`. Clear caches with `pnpm clean` if needed.
 
 **Web page loads but doesn't connect to API**
-- Verify API server is running on http://localhost:3000
-- Check browser console (DevTools → Console) for errors
-- Verify `NEXT_PUBLIC_API_URL` in `apps/web/.env.local`
+- Verify the API is running on http://localhost:3001 and `NEXT_PUBLIC_API_URL` in `apps/web/.env.local` matches.
+- Check the browser console (DevTools → Console) for errors.
 
 ## What's running
 
-- **`apps/api`** (Fastify): Public v1 API, internal BFF routes, Lichess OAuth, rate limiting
-- **`apps/web`** (Next.js): Board UI, game analysis, Fog timeline, Frontier map, position pages
+- **`apps/api`** (Fastify, **:3001**): Public v1 API, internal BFF routes, Lichess OAuth, rate limiting
+- **`apps/web`** (Next.js, **:3000**): Board UI, game analysis, Fog timeline, Frontier map, position pages
 - **`services/analysis`** (Node worker): UCI orchestration (Stockfish/Lc0), Fog computation, game import
-- **PostgreSQL**: Positions, games, analyses, proofs, tablebase cache
-- **Redis** (optional): Pending PKCE state, caching
+- **Postgres / Redis / MinIO** (Docker): position + proof storage, job queue / PKCE state, certificate object storage
 
 ## Core concepts
 

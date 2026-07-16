@@ -28,28 +28,32 @@ penumbra/
 
 ## Local setup
 
-**See [README.md](../README.md#quick-start--local-development-5-minutes) for step-by-step setup.**
+**See [README.md](../README.md#quick-start--local-development) for step-by-step setup.**
 
 ### Prerequisites
 - Node.js ≥ 18, pnpm ≥ 8
-- PostgreSQL (local or Docker)
-- Docker & Docker Compose (optional; for Postgres, Redis, Minio)
+- Docker Desktop (provides Postgres, Redis, Minio — no native Postgres needed)
 - Rust (stable) only if modifying `rust/verifier` or `rust/prover`
 
 ### Quick reference (after first setup)
 
 ```bash
-# Start services once
+# Start backing services once (postgres/redis/minio, creds all 'penumbra')
 docker-compose -f infra/docker-compose.yml up -d
 
-# Terminal 1: API server
+# Build first -- the API dev script runs compiled dist/server.js
+pnpm build
+
+# Terminal 1: API server (Fastify, :3001)
 pnpm --filter @penumbra/api dev
 
-# Terminal 2: Web app
+# Terminal 2: Web app (Next.js, :3000)
 pnpm --filter @penumbra/web dev
 
-# Open http://localhost:3001
+# Open http://localhost:3000
 ```
+
+**Ports:** the web app (Next.js) serves on **3000**; the API (Fastify) serves on **3001** (`apiPort()` in `apps/api/src/context.ts`). `WEB_ORIGIN` defaults to `http://localhost:3000` so the API's CORS matches the web dev server.
 
 **Note:** `pnpm dev` (no filter) attempts to run all packages in parallel, which is error-prone. Instead, run the API and web servers in separate terminals as shown above.
 
