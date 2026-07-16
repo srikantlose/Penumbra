@@ -82,6 +82,13 @@ export function computeFogComponents(
   evals: EngineEvals,
   options: FogComputeOptions
 ): FogComponents {
+  if (evals.stockfishWdl.length === 0) {
+    throw new Error('computeFogComponents: evals.stockfishWdl must have at least one rung');
+  }
+  if (evals.lc0Wdl.length === 0) {
+    throw new Error('computeFogComponents: evals.lc0Wdl must have at least one entry');
+  }
+
   const sfDeepWdl = evals.stockfishWdl[evals.stockfishWdl.length - 1];
   const sfWp = winProbability(
     sfDeepWdl.wins,

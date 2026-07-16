@@ -150,6 +150,16 @@ export class UciClient {
     let bestMoveLine: string;
     try {
       bestMoveLine = await this.waitForLine((l) => l.trim().startsWith('bestmove'), timeoutMs);
+    } catch (err) {
+      // Best-effort: if the wait timed out (rather than the process having
+      // already exited), tell the engine to stop searching instead of
+      // leaving it crunching in the background after the caller gives up.
+      try {
+        this.send('stop');
+      } catch {
+        // process already gone; nothing to stop.
+      }
+      throw err;
     } finally {
       this.activeInfoCapture = null;
     }
