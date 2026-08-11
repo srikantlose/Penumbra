@@ -907,3 +907,19 @@ skipped — not fatal, not corrupting the percentile computation), but future co
 whatever's scored, to replace `FOG_CALIBRATION_V0_1` and drop the provisional labels — not done
 yet. Remaining Phase 2 backlog after that: the full 100k corpus, and Fleet work-unit federation
 (`docs/ROADMAP.md` Deferred section).
+
+### 🟡 Fleet work-unit federation — design proposal only (2026-08-11)
+
+`docs/FLEET_DESIGN.md` (new) is a concrete design proposal, not an implementation: a scenario
+(contributors run `penumbra-prove` locally against a curated work-unit list, sign the result,
+submit to a new endpoint that re-verifies before it reaches the ledger), grounded in the real
+ledger/schema/API code, ending in explicit open questions only the repo owner can answer
+(permissionless vs. invite-only, where verification should run, credit semantics). Nothing from it
+is implemented, and it should stay that way until those questions are answered.
+
+One narrow, independently-justified exception: `metadata.contributors`/`metadata.work_units` have
+been reserved certificate fields since format v0.1, but nothing could ever set them —
+`penumbra-prove prove` now accepts `--contributor <name>` (repeatable) and `--work-unit <id>`,
+threaded through `ProofSearchConfig` into certificate emission. This is a CLI completeness fix, not
+a piece of the Fleet proposal's actual submission/trust design — it doesn't touch `publishProof()`,
+add any API route, or presume an answer to any of the open questions above.

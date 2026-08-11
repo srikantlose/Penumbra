@@ -203,14 +203,19 @@ This does mean `metadata.contributors` is a self-reported label, not a verified 
 identity — a contributor could sign as `"anonymous-4f2a"` and there is no mechanism forcing
 otherwise, nor should there be for v1 (see §7 on what's actually worth guarding against).
 
-### 5.2 A real gap this surfaces: the prover CLI can't populate `contributors` yet
+### 5.2 A real gap this surfaces: the prover CLI couldn't populate `contributors` — now fixed
 
-`rust/prover/src/pns.rs` hardcodes `contributors: None` and `work_units: None` at certificate
-emission time (§2). For Fleet to work at all, `penumbra-prove prove` needs a way to set them —
-concretely, new flags like `--contributor <label>` (repeatable or comma-separated) and
-`--work-unit <id>`, threaded through `ProofSearchConfig` into `certificate.rs`'s emit path. This
-is a small, mechanical Rust change but it is a **real prerequisite**, not an API-side detail — it
-doesn't exist today and nothing in this document should be read as assuming it does.
+**Done, 2026-08-11** (after this document was first drafted): `rust/prover/src/pns.rs` used to
+hardcode `contributors: None` and `work_units: None` at certificate emission time (§2). This was a
+real prerequisite for Fleet, not an API-side detail, so it was closed on its own — deliberately
+scoped narrower than the rest of this proposal, since it's independently useful regardless of what
+happens with the open questions in §9 (it's the CLI catching up to fields the format has reserved
+since v0.1, not a commitment to anything else here). `penumbra-prove prove` now accepts
+`--contributor <name>` (repeatable) and `--work-unit <id>`, threaded through `ProofSearchConfig`
+into `build_certificate`. Verified both that the fields populate correctly and, empirically (not
+just by reading the doc), that a certificate carrying them still verifies clean — metadata really
+is outside the verification boundary in practice, not just on paper. `rust/prover/src/main.rs`,
+`pns.rs`, `tests/prove_and_verify.rs`, `README.md`.
 
 ### 5.3 What `publishProof()` actually does today, and what has to change
 
