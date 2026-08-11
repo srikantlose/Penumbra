@@ -50,3 +50,6 @@ tablebases/
 # Calibration corpus (built via services/analysis's build-calibration-corpus
 # script; frozen positions dataset, not source -- see docs/FOG_INDEX_METHODOLOGY.md)
 /corpus/
+
+# DB + corpus backups (scripts/backup-calibration.ps1), machine-local
+/backups/
