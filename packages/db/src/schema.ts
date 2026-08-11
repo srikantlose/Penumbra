@@ -174,6 +174,35 @@ export const proofs = pgTable(
   })
 );
 
+// Fleet work units: candidate positions published for external contributors
+// to prove (docs/FLEET_DESIGN.md). No claim/lease -- duplicate effort is
+// wasteful, not unsound (publishProof is idempotent on certificate_sha256),
+// so a work unit just flips 'open' -> 'proved' on the first accepted
+// submission that references it. sourceGameId is set only for pipeline-
+// generated work units (see services/analysis's generator script); null for
+// any hand-curated ones added directly.
+export const workUnits = pgTable(
+  'work_units',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    fen: text('fen').notNull(),
+    claimValue: varchar('claim_value', { length: 20 }).notNull(), // 'win' | 'at_least_draw'
+    claimSide: varchar('claim_side', { length: 10 }).notNull(), // 'white' | 'black'
+    notes: text('notes'),
+    status: varchar('status', { length: 20 }).notNull().default('open'), // 'open' | 'proved'
+    sourceGameId: bigint('source_game_id', { mode: 'number' }).references(() => games.id),
+    provedByProofId: bigint('proved_by_proof_id', { mode: 'number' }).references(() => proofs.id),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => ({
+    statusIdx: index('work_units_status_idx').on(table.status),
+    // A pipeline-generated work unit is deterministic from its source
+    // position + claim, so re-running the generator against games it's
+    // already covered must not insert duplicates.
+    fenClaimIdx: uniqueIndex('work_units_fen_claim_idx').on(table.fen, table.claimValue, table.claimSide),
+  })
+);
+
 // Ledger entries (hash-chained, append-only)
 export const ledgerEntries = pgTable(
   'ledger_entries',
