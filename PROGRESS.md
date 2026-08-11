@@ -844,5 +844,66 @@ compressed file is smaller and both verify identically, and confirmed a pre-exis
 example cert with no `PNBC` prefix at all still verifies — "old certificates remain verifiable
 forever" holds in practice.
 
-**Next:** remaining Phase 2 backlog in `docs/ROADMAP.md` (Deferred section) — real calibration
-run, Fleet work-unit federation, certificate signatures/attestation.
+### ✅ Certificate signatures (2026-08-11)
+
+Ed25519 signing/verification, scoped down from the full "Fleet federation / signatures /
+attestation" backlog item — deliberately provenance ("did this file come from this key"), not
+soundness; an unsigned certificate is exactly as valid a proof as a signed one, and structural/
+semantic verification never depends on who produced it.
+
+- New optional `SIG1` sub-block in the `PNBC` wire container, between the magic and the JSON/zstd
+  payload: `tag(4) + alg_id(1) + signature(64)`. Carries only the raw signature, deliberately never
+  the public key — if the container carried its own key, anyone could re-sign a tampered
+  certificate with a freshly generated keypair and have it "verify" against itself. The trusted key
+  always comes from the verifier's own `--trust-key` flag, out-of-band. Fully backward compatible:
+  no `PNBC` prefix → legacy plaintext; `PNBC` with no `SIG1` → unsigned container (every certificate
+  written before this, including the published `verify-v0.1.0` release artifacts).
+- `penumbra-prove keygen --out-prefix <path>` writes `<path>.seed` (raw 32-byte private seed) and
+  `<path>.pub` (raw 32-byte public key). `prove -o ... --sign-key <seed>` signs
+  `certificate_sha256(json)` — the same identity hash `inspect` already prints and the ledger
+  already stores, not a fresh hash and not raw JSON bytes (whitespace-sensitive).
+  `penumbra-verify verify|inspect --trust-key <pub>` checks it; `verify --require-signature` fails
+  closed on an absent signature or a signature with no `--trust-key` given to check it against.
+- `rust/verifier/src/sign.rs` / `rust/prover/src/sign.rs`, both on `ring 0.17`. `penumbra-prover`
+  now depends on `penumbra-verify` at runtime (promoted from dev-only) specifically to call its
+  `certificate_sha256` directly rather than risk a hand-rolled reimplementation silently drifting
+  from the verifier's own canonicalization (parse-then-alphabetically-re-serialize) — the two
+  crates' actual verification logic stays independent, per the project's "zero shared verification
+  code" design principle; this is a narrowly-scoped exception for hashing only.
+- `docs/CERTIFICATE_FORMAT.md` gained a full "Signing (provenance, not soundness)" subsection.
+
+Verified against the real compiled CLIs, not just unit tests, across all four meaningful paths:
+correct key → valid; wrong key → `INVALID`, exit 1; no `--trust-key` given → present-but-unchecked,
+still valid, exit 0; `--require-signature` against a genuinely unsigned legacy example cert → fails,
+exit 1. 65 total workspace tests passing, `cargo clippy --workspace --all-targets` clean,
+`cargo fmt --all -- --check` clean, CI green.
+
+### 🟡 Real calibration run (started 2026-08-11, in progress)
+
+The methodology doc's placeholder `FOG_CALIBRATION_V0_1` table (`percentile_provisional: true`
+everywhere it's served) is still in place — this is the backfill. New tooling:
+`services/analysis/src/scripts/build-calibration-corpus.ts` (real games from four verifiably-elite
+Lichess accounts, plies 10–80, deduped by EPD) and `run-calibration.ts` (resumable: checks
+`fog_scores` before spending engine time on a position, one dedicated DB connection per concurrent
+worker rather than sharing a single `pg.Client`, which node-postgres serializes and warns about
+under concurrent use).
+
+Real measurement corrected a naive roadmap assumption before committing the machine to it: a
+12-position canonical-tier pilot at concurrency=12 measured only ~4.4× effective throughput (not
+12×) from hyperthreaded concurrency on this 6-physical/12-logical-core machine — the full 100k
+corpus would take **~23.6 days**, not the roadmap's original ~9-day estimate. Scoped down to a real
+8,000-position batch first (~31–46h), currently running in the background at canonical tier,
+concurrency=12.
+
+`build-calibration-corpus.ts` originally let a handful of already-checkmated final positions (no
+legal moves → Stockfish reports `bestmove (none)` with no WDL, correctly treated as a failure) leak
+into the corpus from games that end within the ply 10-80 window. Traced via a direct repro against
+the pinned Stockfish binary, then fixed by filtering on chessops' `hasDests()` at corpus-build time.
+The currently-running batch predates the fix (steady ~0.7% failure rate, caught per-item and
+skipped — not fatal, not corrupting the percentile computation), but future corpus builds
+(including the eventual full 100k run) won't have this gap.
+
+**Next:** once this batch completes, `run-calibration.js report` computes real percentiles from
+whatever's scored, to replace `FOG_CALIBRATION_V0_1` and drop the provisional labels — not done
+yet. Remaining Phase 2 backlog after that: the full 100k corpus, and Fleet work-unit federation
+(`docs/ROADMAP.md` Deferred section).

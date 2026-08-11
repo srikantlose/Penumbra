@@ -1398,11 +1398,24 @@ accounts; a crates.io token) rather than on any remaining decision or code.
 
 ## Deferred / post-launch
 
-- **Real calibration run:** 100k Lichess-elite positions (plies 10–80) through the canonical
-  ladder ≈ 90 s/position ⇒ ~104 CPU-days serial, ~9 days at 12× parallel — schedule post-launch
-  (or calibrate the quick-tier fingerprint first); output = new `CalibrationData` for
-  `packages/fog/src/calibration.ts` + the ~200-position QA gate from the methodology doc;
-  replaces the placeholder in a minor release and drops the provisional labels.
+- **Real calibration run — in progress (started 2026-08-11).** The original "~9 days at 12×
+  parallel" estimate above was naive extrapolation and turned out wrong: a real 12-position
+  canonical-tier pilot at concurrency=12 measured ~4.4× effective throughput (not 12×) on this
+  machine's 6-physical/12-logical-core CPU under real hyperthreading contention, meaning the full
+  100k corpus would actually take **~23.6 days** serial-equivalent, not ~9. Rather than commit to
+  that unattended, a smaller real batch was run first: `services/analysis/src/scripts/
+  build-calibration-corpus.ts` (real games from four verifiably-elite Lichess accounts, plies
+  10–80, deduped by EPD) and `run-calibration.ts` (resumable — checks `fog_scores` before spending
+  engine time, per-worker DB connections to avoid serializing on one `pg.Client`) are new tooling
+  built this session. Currently running an 8,000-position batch at canonical tier,
+  concurrency=12, ETA ~31–46h. `build-calibration-corpus.ts` originally let a handful of
+  already-checkmated final positions (no legal moves, so Stockfish reports `bestmove (none)` with
+  no WDL) leak into the corpus — fixed by filtering on `hasDests()` at corpus-build time; the
+  currently-running batch predates the fix (steady ~0.7% failure rate, caught per-item and
+  skipped, not fatal) but future corpus builds won't have this. Once this batch completes, `run-
+  calibration.js report` computes real percentiles from whatever's scored; replacing
+  `FOG_CALIBRATION_V0_1` and dropping the provisional labels is a follow-on step, not done yet.
+  The full 100k corpus remains deferred pending this batch's results.
 - ~~**Lichess OAuth (PKCE, no app registration)**~~ **Done 2026-07-16.** "Connect account" flow
   shipped: `services/analysis/src/import/lichessOAuth.ts` (PKCE + the lichess.org token/account
   calls), two new BFF routes (`/bff/lichess/oauth/start` + `/callback`, pending-state in Redis,
@@ -1448,9 +1461,21 @@ accounts; a crates.io token) rather than on any remaining decision or code.
   a `--compress`ed certificate for the same position both verify identically, and a checked-in
   pre-existing example cert with no `PNBC` prefix at all still verifies — confirming "old
   certificates remain verifiable forever" holds in practice, not just in the spec.
-- **Remaining Phase 2 items** (per CERTIFICATE_FORMAT.md): signatures / attestation, work-unit
-  federation ("Fleet") — deferred pending a concrete multi-contributor scenario to design against;
-  no existing code/infra for either.
+- ~~**Certificate signatures**~~ **Done 2026-08-11.** Ed25519, via a new optional `SIG1` sub-block
+  in the `PNBC` container (between the magic and the JSON/zstd payload — carries only the 64-byte
+  signature, never the public key, so a self-signed re-forgery can't "verify against itself").
+  `penumbra-prove keygen --out-prefix <path>` writes a raw 32-byte seed + public key;
+  `prove -o ... --sign-key <seed>` signs `certificate_sha256(json)` (calling the verifier crate's
+  own hashing function rather than reimplementing its canonicalization a second time — the two
+  crates' actual verification logic stays independent, this is the one narrow exception);
+  `penumbra-verify verify/inspect --trust-key <pub>` checks it, `--require-signature` fails closed
+  on an absent/unchecked one. Explicitly provenance, not soundness — an unsigned certificate is
+  exactly as valid a proof as a signed one; structural/semantic verification never depends on who
+  produced it. `rust/verifier/src/sign.rs` + `rust/prover/src/sign.rs`, both backed by `ring`.
+  Verified against the real compiled CLIs across all four paths (correct key, wrong key, no key
+  given, `--require-signature` against a genuinely unsigned legacy example cert).
+- **Work-unit federation ("Fleet")** — still deferred; no existing code/infra, and needs a
+  concrete multi-contributor scenario to design against.
 - ~~**`missed_proofs` beyond the ≤8-men v1 scope**~~ **Done 2026-07-16.** The v1 gate skipped any
   parent position above 8 pieces before even enumerating its children -- but a `proofs` row isn't
   piece-count-bounded at all (a transposition into an already-proven fortress can happen at any
