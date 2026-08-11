@@ -83,6 +83,14 @@ jobs:
         env:
           DATABASE_URL: postgres://penumbra:penumbra@localhost/penumbra
 
+      # apps/api's Fleet tests (server.test.ts) shell out to the compiled
+      # penumbra-prove/penumbra-verify binaries as real subprocesses -- `pnpm
+      # build` above only builds the TypeScript packages, and the Rust
+      # workspace otherwise wouldn't be built until the later `Test (Rust)`
+      # step, which runs after this one.
+      - name: Build Rust binaries (needed by apps/api's tests)
+        run: cargo build --workspace
+
       - name: Test (TypeScript)
         run: pnpm test
         env:
