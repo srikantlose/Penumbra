@@ -1249,9 +1249,13 @@ methodology finalization. **Every task here has an ask-the-user checkpoint** (§
   placeholder situation and the post-launch plan.
 - [~] **M6 gate (the launch checklist):**
   - `GET /v1/fog?fen=…` on prod: 202 → score. **N/A** — no prod deploy yet (see above).
-  - `cargo install penumbra-verify` works from crates.io. **Pending** — crate is packaged,
-    metadata-complete, and `cargo publish --dry-run` verified; actual `cargo publish` is
-    blocked on a crates.io API token only the account owner can provide (`cargo login`).
+  - `cargo install penumbra-verify` works from crates.io. **Done** 2026-07-11 — the account
+    owner ran `cargo login` + `cargo publish` themselves; `penumbra-verify v0.1.0` is live on
+    the registry (confirmed via the crates.io API: `published_by: srikantlose`,
+    `pubtime: 2026-07-11T18:11:06Z`, not yanked). This line was stale until 2026-08-12 (still
+    read "Pending"/"blocked on a token" after the publish had already happened) — caught only
+    because re-verifying live registry state before re-asking the user surfaced the mismatch
+    with `PROGRESS.md`'s already-correct "done and live" note.
   - A stranger can download a release binary + a fortress cert + Syzygy 3-4-5 and get
     `Valid: true` offline, and `Valid: false` after flipping any byte of the cert. **Verified**
     2026-07-11: downloaded the actual `verify-v0.1.0` Windows release asset from GitHub,
