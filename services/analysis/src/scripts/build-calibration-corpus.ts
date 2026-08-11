@@ -24,6 +24,8 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Chess } from 'chessops/chess';
+import { parseFen } from 'chessops/fen';
 import { streamUserGames } from '../import/lichess.js';
 import { extractPositions } from '../import/pgn.js';
 
@@ -89,6 +91,21 @@ function parseArgs(argv: string[]): Args {
   return args;
 }
 
+// A game that ends in checkmate (or, less commonly, stalemate) has its final
+// position among the plies extracted from it. An engine has nothing to
+// analyze there -- no legal moves means no fog of choice -- and Stockfish
+// reports it as `bestmove (none)` with no WDL, which the analysis pipeline
+// correctly treats as a failure. Filtered out at corpus-build time rather
+// than in extractPositions() itself, since other callers of that function
+// (e.g. full-game analysis) do want the final position.
+function hasLegalMoves(fen: string): boolean {
+  const parsed = parseFen(fen);
+  if (parsed.isErr) return true;
+  const posResult = Chess.fromSetup(parsed.value);
+  if (posResult.isErr) return true;
+  return posResult.value.hasDests();
+}
+
 interface CorpusEntry {
   fen: string;
   epd: string;
@@ -120,6 +137,7 @@ async function main() {
         for (const pos of positions) {
           if (pos.ply < args.minPly || pos.ply > args.maxPly) continue;
           if (seenEpd.has(pos.epd)) continue;
+          if (!hasLegalMoves(pos.fen)) continue;
           seenEpd.add(pos.epd);
           entries.push({
             fen: pos.fen,
