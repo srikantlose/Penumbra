@@ -46,3 +46,7 @@ tablebases/
 # Engine binaries + networks (~1 GB, fetched on demand via scripts/fetch-engines.mjs)
 # Root-anchored: services/analysis/src/engines/ is real source, not this.
 /engines/
+
+# Calibration corpus (built via services/analysis's build-calibration-corpus
+# script; frozen positions dataset, not source -- see docs/FOG_INDEX_METHODOLOGY.md)
+/corpus/

@@ -17,7 +17,9 @@
     "analyze-game": "node dist/cli.js analyze-game",
     "worker": "node dist/queue/worker.js",
     "repro-test": "node dist/scripts/repro-test.js",
-    "repro-test:canonical": "node dist/scripts/repro-test.js --tier canonical"
+    "repro-test:canonical": "node dist/scripts/repro-test.js --tier canonical",
+    "build-calibration-corpus": "node dist/scripts/build-calibration-corpus.js",
+    "run-calibration": "node dist/scripts/run-calibration.js"
   },
   "dependencies": {
     "@penumbra/cert-schema": "workspace:*",
