@@ -33,7 +33,7 @@ const repoRoot = path.resolve(__dirname, '../../../..');
 // Real, verifiably elite (super-GM, 2700+) Lichess accounts, chosen only for
 // ones this doesn't need to guess at. Extend freely -- one username per
 // line keeps future diffs to this list reviewable.
-const ELITE_USERNAMES = ['DrNykterstein', 'penguingim1'];
+const ELITE_USERNAMES = ['DrNykterstein', 'penguingim1', 'LyonBeast', 'Zhigalko_Sergei'];
 
 const DEFAULT_TARGET = 100_000;
 const DEFAULT_MAX_GAMES_PER_USER = 3_000;
@@ -112,29 +112,36 @@ async function main() {
   outer: for (const username of args.usernames) {
     console.log(`  streaming games for ${username} (max ${args.maxGamesPerUser})...`);
     let userGames = 0;
-    for await (const game of streamUserGames(username, { max: args.maxGamesPerUser })) {
-      userGames += 1;
-      gamesScanned += 1;
-      const positions = extractPositions(game.pgn);
-      for (const pos of positions) {
-        if (pos.ply < args.minPly || pos.ply > args.maxPly) continue;
-        if (seenEpd.has(pos.epd)) continue;
-        seenEpd.add(pos.epd);
-        entries.push({
-          fen: pos.fen,
-          epd: pos.epd,
-          ply: pos.ply,
-          pieceCount: pos.pieceCount,
-          sourceGameId: game.id,
-          sourceUsername: username,
-        });
-        if (entries.length >= args.target) break outer;
+    try {
+      for await (const game of streamUserGames(username, { max: args.maxGamesPerUser })) {
+        userGames += 1;
+        gamesScanned += 1;
+        const positions = extractPositions(game.pgn);
+        for (const pos of positions) {
+          if (pos.ply < args.minPly || pos.ply > args.maxPly) continue;
+          if (seenEpd.has(pos.epd)) continue;
+          seenEpd.add(pos.epd);
+          entries.push({
+            fen: pos.fen,
+            epd: pos.epd,
+            ply: pos.ply,
+            pieceCount: pos.pieceCount,
+            sourceGameId: game.id,
+            sourceUsername: username,
+          });
+          if (entries.length >= args.target) break outer;
+        }
+        if (userGames % 100 === 0) {
+          console.log(`    ${username}: ${userGames} games scanned, ${entries.length} positions so far`);
+        }
       }
-      if (userGames % 100 === 0) {
-        console.log(`    ${username}: ${userGames} games scanned, ${entries.length} positions so far`);
-      }
+      console.log(`  ${username}: done, ${userGames} games scanned`);
+    } catch (err) {
+      // A renamed/private/nonexistent account shouldn't abort the whole
+      // corpus build -- skip it and keep going with whatever's already
+      // collected plus the remaining usernames.
+      console.warn(`  ${username}: failed after ${userGames} games (${(err as Error).message}) -- skipping`);
     }
-    console.log(`  ${username}: done, ${userGames} games scanned`);
   }
 
   await mkdir(path.dirname(args.out), { recursive: true });
