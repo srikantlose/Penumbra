@@ -131,6 +131,11 @@ export async function publishProof(db: Database, minio: MinioClient, epd: string
         claim: certificate.claim,
         epd,
         published_at: publishedAt.toISOString(),
+        // Pure attribution, read straight off the certificate's own
+        // metadata -- null for every proof with no contributors set (every
+        // one published before Fleet, and any hand-run `penumbra-prove`
+        // call without --contributor). docs/FLEET_DESIGN.md §6.2.
+        contributors: certificate.metadata?.contributors ?? null,
       },
       proofRow.id
     );

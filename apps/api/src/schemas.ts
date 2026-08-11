@@ -248,3 +248,77 @@ export const bffLichessOAuthCallbackResponseSchema = z.object({
 export const errorResponseSchema = z.object({
   error: z.string(),
 });
+
+// Fleet (docs/FLEET_DESIGN.md) -- work-unit federation.
+
+export const workUnitStatusSchema = z.enum(['open', 'proved']);
+
+export const workUnitListQuerySchema = z.object({
+  status: workUnitStatusSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+export const workUnitIdParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
+export const workUnitSummarySchema = z.object({
+  id: z.number(),
+  fen: z.string(),
+  claimValue: z.string(),
+  claimSide: z.string(),
+  notes: z.string().nullable(),
+  status: z.string(),
+  createdAt: z.string(),
+});
+
+export const workUnitListResponseSchema = z.object({
+  workUnits: z.array(workUnitSummarySchema),
+  total: z.number(),
+});
+
+// Deliberately loose: real soundness validation is the penumbra-verify
+// subprocess's job (docs/FLEET_DESIGN.md §5.4), not zod's. `.passthrough()`
+// on the top level and `z.unknown()` for nodes/dependencies means nothing
+// here can silently truncate a structurally-unfamiliar but otherwise sound
+// certificate before it ever reaches the verifier -- this schema exists to
+// give the route handler typed access to `claim.fen` and
+// `metadata.contributors` before verification, not to gate submissions.
+export const certificateInputSchema = z
+  .object({
+    format_version: z.string(),
+    claim: z.object({
+      fen: z.string(),
+      zobrist: z.string(),
+      value: z.string(),
+      side: z.string(),
+    }),
+    rules: z.string(),
+    root_id: z.string(),
+    nodes: z.array(z.unknown()),
+    dependencies: z.unknown().optional(),
+    metadata: z
+      .object({
+        producer: z.string().optional(),
+        timestamp: z.string().optional(),
+        contributors: z.array(z.string()).optional(),
+        work_units: z.array(z.string()).optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
+export const fleetSubmissionBodySchema = z.object({
+  certificate: certificateInputSchema,
+  workUnitId: z.number().int().positive().optional(),
+});
+
+export const fleetSubmissionResponseSchema = z.object({
+  proofId: z.number(),
+  certificateSha256: z.string(),
+  ledgerSeq: z.number().nullable(),
+  alreadyPublished: z.boolean(),
+  contributors: z.array(z.string()).nullable(),
+});

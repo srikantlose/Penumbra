@@ -1,4 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { existsSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { Queue } from 'bullmq';
 import { getDatabase, schema } from '@penumbra/db';
@@ -7,6 +14,32 @@ import type { Certificate } from '@penumbra/cert-schema';
 import { buildServer } from './server.js';
 import { databaseUrl, minioClient, type ApiContext } from './context.js';
 import { publishProof, computeEntryHash, LEDGER_GENESIS_PREV_HASH } from './ledger.js';
+
+const execFileAsync = promisify(execFile);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, '../../..');
+
+/**
+ * Runs the real `penumbra-prove` CLI and returns the certificate it emits.
+ * Fleet's submission endpoint enforces real verification (unlike
+ * publishProof() called directly, which trusts its caller) -- a hand-typed
+ * fixture cert with a fabricated zobrist would fail that gate, so these
+ * tests need a genuinely valid certificate the same way a real contributor
+ * would produce one. Resolves the same release/debug candidates
+ * verifySubprocess.ts does for penumbra-verify, for penumbra-prove instead.
+ */
+async function proveRealCertificate(fen: string, side: 'white' | 'black'): Promise<Certificate> {
+  const exeSuffix = os.platform() === 'win32' ? '.exe' : '';
+  const candidates = ['release', 'debug'].map((profile) =>
+    path.join(repoRoot, 'target', profile, `penumbra-prove${exeSuffix}`)
+  );
+  const binary = candidates.find((p) => existsSync(p));
+  if (!binary) {
+    throw new Error(`penumbra-prove binary not found (looked in: ${candidates.join(', ')}) -- run cargo build -p penumbra-prover first`);
+  }
+  const { stdout } = await execFileAsync(binary, ['prove', fen, '--side', side]);
+  return JSON.parse(stdout) as Certificate;
+}
 
 // These are fastify.inject() integration tests against the real docker
 // Postgres/Redis (docs/ROADMAP.md Stage 5) -- this repo has no disposable
@@ -199,6 +232,105 @@ describe('apps/api', () => {
     it('allows anonymous GETs', async () => {
       const response = await app.inject({ method: 'GET', url: '/v1/meta/methodology' });
       expect(response.statusCode).toBe(200);
+    });
+  });
+
+  describe('Fleet', () => {
+    // Distinct from PROOF_TEST_FEN above and from anything this session's
+    // manual smoke testing already published -- a fresh FEN so the "not
+    // already published" assertion below is actually meaningful.
+    const FLEET_TEST_FEN = '6k1/8/6K1/8/8/8/8/1R6 w - - 0 1'; // Rb8# is mate: Kg6 covers f7/g7/h7, Rb8 covers the whole back rank.
+
+    it('rejects a certificate that fails real verification, without touching the ledger', async () => {
+      const certificate = await proveRealCertificate(FLEET_TEST_FEN, 'white');
+      // Corrupt the winning move so the replayed position no longer matches
+      // the node's declared zobrist -- a real structural failure, not just
+      // a claim-strength mismatch (a genuine win certificate is valid
+      // evidence for a weaker at_least_draw claim too, so tampering
+      // claim.value alone is not actually an invalid certificate).
+      const tampered: Certificate = JSON.parse(JSON.stringify(certificate));
+      tampered.nodes.find((n) => n.id === tampered.root_id)!.moves![0].uci = 'b1b2';
+
+      const before = await app.inject({ method: 'GET', url: '/v1/ledger' });
+      const response = await app.inject({ method: 'POST', url: '/v1/fleet/submissions', payload: { certificate: tampered } });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toEqual(expect.stringContaining('zobrist mismatch'));
+
+      const after = await app.inject({ method: 'GET', url: '/v1/ledger' });
+      expect(after.json().entries.length).toBe(before.json().entries.length);
+    });
+
+    it('publishes a real submission, closes its work unit, and is idempotent on resubmission', async () => {
+      const certificate = await proveRealCertificate(FLEET_TEST_FEN, 'white');
+
+      // fetch-or-create, not a bare insert: work_units isn't append-only
+      // triggered, but like everything else in this suite it's still a
+      // permanent fixture in this non-disposable dev DB (see the top-of-file
+      // comment), so a second run of this suite must not collide on the
+      // fen+claim unique index.
+      await context.db
+        .insert(schema.workUnits)
+        .values({ fen: FLEET_TEST_FEN, claimValue: 'win', claimSide: 'white', status: 'open' })
+        .onConflictDoNothing({ target: [schema.workUnits.fen, schema.workUnits.claimValue, schema.workUnits.claimSide] });
+      const [workUnit] = await context.db.select().from(schema.workUnits).where(eq(schema.workUnits.fen, FLEET_TEST_FEN)).limit(1);
+
+      const first = await app.inject({
+        method: 'POST',
+        url: '/v1/fleet/submissions',
+        payload: { certificate, workUnitId: workUnit.id },
+      });
+      expect(first.statusCode).toBe(201);
+      const firstBody = first.json();
+      // Not asserting alreadyPublished here: a prior run of this same suite
+      // against this same non-disposable DB may have already published this
+      // exact (deterministic) certificate -- the resubmission call below is
+      // what actually pins down the idempotency behavior, unconditionally.
+      expect(firstBody.certificateSha256).toMatch(/^0x[0-9a-f]{64}$/);
+
+      const workUnitAfter = await app.inject({ method: 'GET', url: `/v1/fleet/work-units/${workUnit.id}` });
+      expect(workUnitAfter.json().status).toBe('proved');
+
+      const ledgerEntry = (await app.inject({ method: 'GET', url: '/v1/ledger' })).json().entries.find(
+        (e: { payload: { proof_sha256?: string } }) => e.payload.proof_sha256 === firstBody.certificateSha256
+      );
+      // No --contributor was passed to proveRealCertificate, so this
+      // exercises the "no attribution given" path -- must be null, not [].
+      expect(ledgerEntry.payload.contributors).toBeNull();
+
+      const second = await app.inject({
+        method: 'POST',
+        url: '/v1/fleet/submissions',
+        payload: { certificate, workUnitId: workUnit.id },
+      });
+      expect(second.statusCode).toBe(201);
+      expect(second.json()).toEqual({ ...firstBody, alreadyPublished: true });
+    });
+
+    it('400s an unknown work unit id before ever attempting verification', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/fleet/submissions',
+        payload: { certificate: await proveRealCertificate(FLEET_TEST_FEN, 'white'), workUnitId: 999_999_999 },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toEqual(expect.stringContaining('999999999'));
+    });
+
+    it('lists and fetches work units', async () => {
+      const listResponse = await app.inject({ method: 'GET', url: '/v1/fleet/work-units?limit=200' });
+      expect(listResponse.statusCode).toBe(200);
+      const { workUnits, total } = listResponse.json();
+      expect(total).toBeGreaterThan(0);
+      expect(workUnits.find((w: { fen: string }) => w.fen === FLEET_TEST_FEN)).toBeDefined();
+
+      const detailResponse = await app.inject({ method: 'GET', url: `/v1/fleet/work-units/${workUnits[0].id}` });
+      expect(detailResponse.statusCode).toBe(200);
+      expect(detailResponse.json().id).toBe(workUnits[0].id);
+    });
+
+    it('404s an unknown work unit id', async () => {
+      const response = await app.inject({ method: 'GET', url: '/v1/fleet/work-units/999999999' });
+      expect(response.statusCode).toBe(404);
     });
   });
 

@@ -12,6 +12,7 @@ import { registerProofsRoutes } from './routes/proofs.js';
 import { registerLedgerRoutes } from './routes/ledger.js';
 import { registerBffRoutes } from './routes/bff.js';
 import { registerGamesRoutes } from './routes/games.js';
+import { registerFleetRoutes } from './routes/fleet.js';
 
 export async function buildServer(context: ApiContext): Promise<FastifyInstance> {
   const fastify = Fastify({ logger: !process.env.VITEST }).withTypeProvider<ZodTypeProvider>();
@@ -33,6 +34,7 @@ export async function buildServer(context: ApiContext): Promise<FastifyInstance>
   await registerLedgerRoutes(fastify, context);
   await registerBffRoutes(fastify, context);
   await registerGamesRoutes(fastify, context);
+  await registerFleetRoutes(fastify, context);
 
   return fastify;
 }
