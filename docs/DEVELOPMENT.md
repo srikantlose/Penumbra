@@ -165,6 +165,8 @@ No key yet? Stitch's built-in export needs no server: open the screen, click the
 - `GET /v1/proofs/{id}` → claim, status, certificate_sha256, download URL
 - `GET /v1/ledger?since_seq=...` → hash-chained entries
 - `GET /v1/meta/methodology` → fog spec versions, engine fingerprints
+- `GET /v1/fleet/work-units` / `GET /v1/fleet/work-units/{id}` → candidate positions open for contributors to prove (`docs/FLEET_DESIGN.md`)
+- `POST /v1/fleet/submissions` → submit a certificate (anonymous; gated on real `penumbra-verify` verification before it reaches the ledger, not on who's asking)
 
 Rate limiting: per-API-key + per-IP; quota tiers (free = N deep analyses/day).
 

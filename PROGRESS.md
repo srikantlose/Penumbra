@@ -908,18 +908,72 @@ whatever's scored, to replace `FOG_CALIBRATION_V0_1` and drop the provisional la
 yet. Remaining Phase 2 backlog after that: the full 100k corpus, and Fleet work-unit federation
 (`docs/ROADMAP.md` Deferred section).
 
-### 🟡 Fleet work-unit federation — design proposal only (2026-08-11)
+### ✅ Fleet work-unit federation v1 (2026-08-12)
 
-`docs/FLEET_DESIGN.md` (new) is a concrete design proposal, not an implementation: a scenario
-(contributors run `penumbra-prove` locally against a curated work-unit list, sign the result,
-submit to a new endpoint that re-verifies before it reaches the ledger), grounded in the real
-ledger/schema/API code, ending in explicit open questions only the repo owner can answer
-(permissionless vs. invite-only, where verification should run, credit semantics). Nothing from it
-is implemented, and it should stay that way until those questions are answered.
+`docs/FLEET_DESIGN.md` (2026-08-11) proposed a scenario and ended in open questions for the repo
+owner. Answered — permissionless, work units pipeline-generated (not hand-curated), verification
+via the `penumbra-verify` subprocess — and built. First public mutating `/v1` route this project
+has shipped.
 
-One narrow, independently-justified exception: `metadata.contributors`/`metadata.work_units` have
-been reserved certificate fields since format v0.1, but nothing could ever set them —
-`penumbra-prove prove` now accepts `--contributor <name>` (repeatable) and `--work-unit <id>`,
-threaded through `ProofSearchConfig` into certificate emission. This is a CLI completeness fix, not
-a piece of the Fleet proposal's actual submission/trust design — it doesn't touch `publishProof()`,
-add any API route, or presume an answer to any of the open questions above.
+- **`packages/db`**: new `work_units` table (`fen`, `claim_value`, `claim_side`, `notes`, `status`
+  `'open'|'proved'`, `source_game_id`, `proved_by_proof_id`, unique on `(fen, claim_value,
+  claim_side)`). No `proofs.work_unit_id` reverse column — attempted one, but `proofs`/`work_units`
+  referencing each other's `.id` in both directions is a genuine circular type inference `tsc`
+  can't resolve through drizzle's `pgTable` return type; the one-directional
+  `work_units.proved_by_proof_id → proofs.id` plus the ledger payload's own `work_unit_id` (see
+  below) already answers everything the reverse column would have, without fighting the type
+  system. Migration `0002_nasty_luminals.sql`, applied to local Postgres.
+- **`apps/api/src/verifySubprocess.ts`** (new): shells out to the compiled `penumbra-verify`
+  binary rather than duplicating semantic verification in TypeScript — per the design doc's own
+  §5.4 recommendation, precedented by how `services/analysis`'s `UciClient` already spawns native
+  engine subprocesses. Resolves the binary from `PENUMBRA_VERIFY_BIN` or the usual
+  `target/{release,debug}/penumbra-verify(.exe)` cargo output locations, erroring with a `cargo
+  build` hint if neither exists — a missing binary must never silently read as "certificate
+  invalid." Exit code 1 (the CLI's normal invalid-certificate signal) is parsed as a real, expected
+  result, not a thrown execution failure; anything else (binary missing, timeout) re-throws.
+- **`apps/api/src/routes/fleet.ts`** (new): `GET /v1/fleet/work-units` (paginated, optional
+  `?status=`), `GET /v1/fleet/work-units/:id`, `POST /v1/fleet/submissions`. The submission route
+  is anonymous (no `requireApiKey`) — backstopped only by the existing global 60/min per-IP rate
+  limit, matching the design's "permissionless by construction, trust supplied by verification not
+  registration" posture. Verification runs unconditionally before `publishProof()` is ever called,
+  identically regardless of who submitted; a `workUnitId`, if given, must reference a real row
+  (checked before verification, so a bad id 400s cheaply) and flips to `'proved'` only after a
+  successful, non-duplicate publish.
+- **`apps/api/src/ledger.ts`**: `publishProof()`'s ledger payload gained
+  `contributors: certificate.metadata?.contributors ?? null` — the one change to the existing
+  publish path; its verification-free behavior for `scripts/publish-proofs.mjs` (which always
+  hand-verifies first) is otherwise untouched.
+- **`services/analysis/src/scripts/generate-fleet-work-units.ts`** (new): the pipeline-generated
+  work-unit source FLEET_DESIGN.md §3.1 named but didn't build — real checkmate (verified via
+  chessops, not just "the game ended here": resignations/timeouts never reach an actual mated
+  position), piece count `> SYZYGY_MAX_PIECES`, `analyses.proof_entry_ply IS NULL`. Publishes a
+  position a fixed lookback before the mate (default 10 plies, `--lookback-plies`), not the mate
+  itself (trivially already "proven" by the game) and not an attempt at the *true* critical
+  branching point (undecidable without already doing the search this generates work for) — a
+  documented simplification, not a claim every generated candidate is provable within budget.
+  Idempotent on the same unique index as the API route relies on.
+- Certificate signing (2026-08-11's work) isn't checked server-side yet — a submission's
+  `metadata.contributors` comes straight from the parsed request body, same trust level as any
+  other field the verifier doesn't itself check. Matches the design doc's own §5.5 stance (a
+  signature is attribution, never a substitute for verification) but means the "also check the
+  submitter's signature" half of the signing feature has no caller yet; noted as a real v1.1 gap,
+  not a silent omission.
+
+**Verified live against real infra, not just the automated suite**: booted the real API server
+against real docker Postgres/Redis/minio, proved a real mate-in-1 via `penumbra-prove`, and drove
+all four meaningful paths by hand with `curl` — real submission (201, ledger entry with
+`contributors`, work unit flips to `proved`), a genuinely tampered certificate (400, real verifier
+error, ledger count unchanged), an unknown `workUnitId` (400, no verification attempted), and
+resubmission of the same certificate (`alreadyPublished: true`, no duplicate ledger entry). Ran
+`generate-fleet-work-units.js` against the one real analyzed game in local dev (the M4 acceptance
+gate's `DrNykterstein` game) — correctly found it, correctly generated a work unit 10 plies before
+its real ply-49 mate, correctly no-opped on a second run.
+
+Automated coverage: `apps/api/src/server.test.ts` gained a `Fleet` describe block using a real
+`penumbra-prove`-generated certificate (a hand-typed fixture would fail real verification, unlike
+every other `publishProof()`-direct test in this file) — rejection-without-ledger-growth,
+publish + work-unit-closing + idempotent resubmission, unknown work-unit-id, list/detail/404.
+Written to survive reruns against this repo's non-disposable dev DB (fetch-or-create the work
+unit, don't assert a specific `alreadyPublished` value on the first call) — confirmed by actually
+running the suite twice in a row. `pnpm turbo run test type-check lint` (19/19 tasks) and
+`pnpm --filter @penumbra/analysis test` (65/65) all green.

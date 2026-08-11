@@ -1,9 +1,15 @@
 # Fleet: Work-Unit Federation — Design Proposal
 
-**Status: proposal, not a decision.** This document exists to give the repo owner something
-concrete to approve, redirect, or reject — it is not an implementation plan and nothing in it is
-committed to. No application code was written or changed to produce it. Where reasonable people
-could disagree, the tradeoff is flagged rather than resolved.
+**Status: v1 built, 2026-08-12.** The repo owner answered §9's open questions and asked for it to
+be built: permissionless (§5.1, as proposed), work units pipeline-generated rather than
+hand-curated (§3.2/§8's default — the one real deviation from this document, see below), and
+verification via the `penumbra-verify` subprocess (§5.4 option (a), as proposed). §4's
+skip-claiming recommendation was also followed as-is. §8's phased first slice is implemented and
+live-tested end to end against real docker infra: `POST /v1/fleet/submissions` accepts a
+certificate, runs it through the real `penumbra-verify` binary before it ever reaches
+`publishProof()`, and closes the referenced work unit on success. See PROGRESS.md's dated entry
+for the full account of what shipped. The rest of this document is kept as the original proposal
+for context, not retroactively edited to match the build.
 
 `docs/ROADMAP.md`'s Deferred section has carried "Work-unit federation ('Fleet')" since Stage 2,
 with the same reason attached every time it came up again: "no existing code/infra, and needs a
@@ -131,6 +137,19 @@ of the fortress README describes real dead ends — families that "blow the 500k
 budget without proving anything" — that were discarded before ever reaching a committed file).
 Publishing every `proofEntryPly IS NULL` game as a work unit would likely publish a lot of
 practically-unprovable middlegame FENs alongside the tractable ones.
+
+**Built anyway, 2026-08-12** (the repo owner chose this over hand-curation): the no-provability-
+filter caveat above stands and is documented as a known, accepted limitation, not solved --
+`services/analysis/src/scripts/generate-fleet-work-units.ts` implements the detector exactly as
+described (real checkmate, piece count `> SYZYGY_MAX_PIECES`, `analyses.proof_entry_ply IS NULL`),
+plus one concrete decision this document hadn't made yet: which position to actually publish as
+the work unit. Proving the position right before the mating move is trivial (the game already
+demonstrates it), and finding the *true* critical branching point is undecidable without already
+doing the search this exists to generate work for -- so the script uses a fixed lookback (default
+10 plies before the mate, `--lookback-plies` to change it), clamped to ply 0. This is a documented
+simplification, not a claim of precision: some generated candidates will be easy, some may exceed
+any reasonable search budget and simply never get proven, and that's an accepted, visible outcome
+(the work unit just stays `'open'`), not a bug.
 
 ## 4. Work-unit definition and assignment
 

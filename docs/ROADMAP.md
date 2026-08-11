@@ -1474,8 +1474,16 @@ accounts; a crates.io token) rather than on any remaining decision or code.
   produced it. `rust/verifier/src/sign.rs` + `rust/prover/src/sign.rs`, both backed by `ring`.
   Verified against the real compiled CLIs across all four paths (correct key, wrong key, no key
   given, `--require-signature` against a genuinely unsigned legacy example cert).
-- **Work-unit federation ("Fleet")** — still deferred; no existing code/infra, and needs a
-  concrete multi-contributor scenario to design against.
+- ~~**Work-unit federation ("Fleet")**~~ **v1 done 2026-08-12.** `docs/FLEET_DESIGN.md` supplied
+  the concrete scenario this bullet had been waiting on; the repo owner answered its open questions
+  (permissionless, pipeline-generated work units, verification via the `penumbra-verify`
+  subprocess) and it was built. First public mutating `/v1` route this project has shipped:
+  `POST /v1/fleet/submissions` runs a submitted certificate through real verification — the same
+  path any other certificate gets, no lighter check for a "trusted" submitter — before it can ever
+  reach `publishProof()`. New `work_units` table, `GET /v1/fleet/work-units[/​:id]`, and
+  `services/analysis/src/scripts/generate-fleet-work-units.ts` (real checkmate + piece count
+  beyond Syzygy range + `proof_entry_ply IS NULL`, no provability pre-filter — a documented,
+  accepted limitation, not solved). Full account in `PROGRESS.md`'s dated entry.
 - ~~**`missed_proofs` beyond the ≤8-men v1 scope**~~ **Done 2026-07-16.** The v1 gate skipped any
   parent position above 8 pieces before even enumerating its children -- but a `proofs` row isn't
   piece-count-bounded at all (a transposition into an already-proven fortress can happen at any
