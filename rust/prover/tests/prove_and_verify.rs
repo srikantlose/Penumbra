@@ -72,6 +72,40 @@ fn no_certificate_for_a_dead_draw() {
 }
 
 #[test]
+fn metadata_attribution_survives_verification() {
+  // Contributors/work-units are pure attribution, outside the verification
+  // boundary -- confirm that empirically, not just by reading the doc:
+  // populating them must not upset the verifier.
+  let config = ProofSearchConfig {
+    contributors: Some(vec!["alice".to_string(), "bob".to_string()]),
+    work_units: Some(vec!["work-unit-42".to_string()]),
+    ..ProofSearchConfig::default()
+  };
+  let search = ProofNumberSearch::new(config);
+  let outcome = search
+    .prove("6k1/5ppp/8/8/8/8/8/R6K w - - 0 1", Some(Color::White))
+    .expect("position parses");
+  assert!(outcome.result.proven, "expected a forced win");
+
+  let cert = outcome
+    .certificate
+    .expect("proved search yields a certificate");
+  assert_eq!(
+    cert.metadata.contributors,
+    Some(vec!["alice".to_string(), "bob".to_string()])
+  );
+  assert_eq!(
+    cert.metadata.work_units,
+    Some(vec!["work-unit-42".to_string()])
+  );
+  let json = cert.to_json_pretty();
+
+  let verifier = CertificateVerifier::load_from_json(&json).expect("cert loads");
+  let report = verifier.verify().expect("verification runs");
+  assert!(report.valid, "errors: {:?}", report.errors);
+}
+
+#[test]
 fn invalid_fen_is_reported() {
   let search = ProofNumberSearch::new(ProofSearchConfig::default());
   let err = search.prove("not a fen", None).unwrap_err();

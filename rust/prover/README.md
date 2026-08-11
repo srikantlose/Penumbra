@@ -31,6 +31,10 @@ penumbra-prove prove "<FEN>" [--side white|black] [-o out.pnbcert] [--compress]
 to stdout as plain JSON; a one-line search summary (`proven=… nodes=… elapsed=…ms`)
 always goes to stderr. Exit code is 0 when a win is proved, 1 otherwise.
 
+Add `--contributor NAME` (repeatable) and/or `--work-unit ID` to stamp the
+certificate's `metadata.contributors` / `metadata.work_units`. Both are pure
+attribution -- omitted by default, and never checked by `penumbra-verify`.
+
 With `-o`, the file is written as a `PNBC`-prefixed container (see
 [`CERTIFICATE_FORMAT.md`](../../docs/CERTIFICATE_FORMAT.md#wire-format)); add
 `--compress` to zstd-compress the payload inside that container. `penumbra-verify`

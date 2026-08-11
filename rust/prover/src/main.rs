@@ -3,7 +3,7 @@
 //! Given a FEN and a claiming side, it searches for a forced mate and, on
 //! success, writes a v0.1 `.pnbcert` certificate that `penumbra-verify` accepts.
 
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use penumbra_prover::{ClaimValue, ProofNumberSearch, ProofSearchConfig};
 use shakmaty::Color;
 use std::fs;
@@ -21,49 +21,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
   /// Prove a forced win from a position and write its certificate.
-  Prove {
-    #[arg(help = "Position to prove, in FEN")]
-    fen: String,
-
-    #[arg(long, value_parser = ["white", "black"], help = "Claiming side (defaults to side to move)")]
-    side: Option<String>,
-
-    #[arg(short, long, help = "Write the certificate here (defaults to stdout)")]
-    out: Option<PathBuf>,
-
-    #[arg(long, default_value_t = 2_000_000, help = "Search node budget")]
-    max_nodes: usize,
-
-    #[arg(long, default_value_t = 30_000, help = "Time budget in milliseconds")]
-    time_ms: u64,
-
-    #[arg(
-      long,
-      value_parser = ["win", "at_least_draw"],
-      default_value = "win",
-      help = "What to prove"
-    )]
-    claim: String,
-
-    #[arg(
-      long,
-      help = "Path to a Syzygy tablebase directory (enables tablebase leaves)"
-    )]
-    syzygy: Option<PathBuf>,
-
-    #[arg(
-      long,
-      default_value_t = false,
-      help = "zstd-compress the written certificate (only applies with -o; ignored for stdout)"
-    )]
-    compress: bool,
-
-    #[arg(
-      long,
-      help = "Path to a raw 32-byte Ed25519 seed (see `penumbra-prove keygen`); signs the written certificate (only applies with -o; ignored for stdout)"
-    )]
-    sign_key: Option<PathBuf>,
-  },
+  Prove(Box<ProveArgs>),
   /// Generate a new Ed25519 signing keypair for `prove --sign-key`.
   Keygen {
     #[arg(
@@ -74,11 +32,71 @@ enum Commands {
   },
 }
 
+// Boxed in `Commands::Prove` above (clippy::large_enum_variant): this struct
+// carries far more fields than `Keygen`, so without the box every `Commands`
+// value would pay for the largest variant's size.
+#[derive(Args)]
+struct ProveArgs {
+  #[arg(help = "Position to prove, in FEN")]
+  fen: String,
+
+  #[arg(long, value_parser = ["white", "black"], help = "Claiming side (defaults to side to move)")]
+  side: Option<String>,
+
+  #[arg(short, long, help = "Write the certificate here (defaults to stdout)")]
+  out: Option<PathBuf>,
+
+  #[arg(long, default_value_t = 2_000_000, help = "Search node budget")]
+  max_nodes: usize,
+
+  #[arg(long, default_value_t = 30_000, help = "Time budget in milliseconds")]
+  time_ms: u64,
+
+  #[arg(
+    long,
+    value_parser = ["win", "at_least_draw"],
+    default_value = "win",
+    help = "What to prove"
+  )]
+  claim: String,
+
+  #[arg(
+    long,
+    help = "Path to a Syzygy tablebase directory (enables tablebase leaves)"
+  )]
+  syzygy: Option<PathBuf>,
+
+  #[arg(
+    long,
+    default_value_t = false,
+    help = "zstd-compress the written certificate (only applies with -o; ignored for stdout)"
+  )]
+  compress: bool,
+
+  #[arg(
+    long,
+    help = "Path to a raw 32-byte Ed25519 seed (see `penumbra-prove keygen`); signs the written certificate (only applies with -o; ignored for stdout)"
+  )]
+  sign_key: Option<PathBuf>,
+
+  #[arg(
+    long,
+    help = "Attribution only: a contributor to record in the certificate's metadata.contributors (repeatable; does not affect verification)"
+  )]
+  contributor: Vec<String>,
+
+  #[arg(
+    long,
+    help = "Attribution only: a work-unit identifier to record as the certificate's metadata.work_units (does not affect verification)"
+  )]
+  work_unit: Option<String>,
+}
+
 fn main() -> ExitCode {
   let cli = Cli::parse();
 
   match cli.command {
-    Commands::Prove { .. } => run_prove(cli.command),
+    Commands::Prove(args) => run_prove(*args),
     Commands::Keygen { out_prefix } => run_keygen(&out_prefix),
   }
 }
@@ -122,8 +140,8 @@ fn with_extension(prefix: &Path, ext: &str) -> PathBuf {
   path
 }
 
-fn run_prove(command: Commands) -> ExitCode {
-  let Commands::Prove {
+fn run_prove(args: ProveArgs) -> ExitCode {
+  let ProveArgs {
     fen,
     side,
     out,
@@ -133,10 +151,9 @@ fn run_prove(command: Commands) -> ExitCode {
     syzygy,
     compress,
     sign_key,
-  } = command
-  else {
-    unreachable!("run_prove is only called with Commands::Prove")
-  };
+    contributor,
+    work_unit,
+  } = args;
 
   if compress && out.is_none() {
     eprintln!("--compress has no effect without -o; stdout output is always plain JSON");
@@ -168,6 +185,8 @@ fn run_prove(command: Commands) -> ExitCode {
     time_limit_ms: time_ms,
     tablebase_path: syzygy.map(|p| p.display().to_string()),
     claim: claim_value,
+    contributors: (!contributor.is_empty()).then_some(contributor),
+    work_units: work_unit.map(|w| vec![w]),
   };
 
   let search = ProofNumberSearch::new(config);

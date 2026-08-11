@@ -64,6 +64,16 @@ pub struct ProofSearchConfig {
   pub tablebase_path: Option<String>,
   #[serde(default)]
   pub claim: ClaimValue,
+  /// Attribution only -- carried straight into `metadata.contributors` on the
+  /// emitted certificate. Outside the verification boundary; see
+  /// `docs/CERTIFICATE_FORMAT.md`.
+  #[serde(default)]
+  pub contributors: Option<Vec<String>>,
+  /// Attribution only -- carried straight into `metadata.work_units` on the
+  /// emitted certificate. Outside the verification boundary; see
+  /// `docs/CERTIFICATE_FORMAT.md`.
+  #[serde(default)]
+  pub work_units: Option<Vec<String>>,
 }
 
 impl Default for ProofSearchConfig {
@@ -73,6 +83,8 @@ impl Default for ProofSearchConfig {
       time_limit_ms: 30_000,
       tablebase_path: None,
       claim: ClaimValue::Win,
+      contributors: None,
+      work_units: None,
     }
   }
 }
@@ -428,8 +440,8 @@ impl<'a> Solver<'a> {
       metadata: Metadata {
         producer: "penumbra-prover 0.1".to_string(),
         timestamp: now_rfc3339(),
-        contributors: None,
-        work_units: None,
+        contributors: self.config.contributors.clone(),
+        work_units: self.config.work_units.clone(),
       },
     }
   }
@@ -633,5 +645,56 @@ mod tests {
       .expect("root node present");
     assert_eq!(root_node.moves.len(), 2);
     assert_eq!(root_node.moves[0].child_id, root_node.moves[1].child_id);
+  }
+
+  /// `contributors`/`work_units` set on the config flow through to
+  /// `metadata`; left at the default `None`, the certificate must still omit
+  /// them (not silently become `Some(vec![])`).
+  #[test]
+  fn build_certificate_carries_metadata_attribution() {
+    let root_pos = Chess::default();
+    let root = PnsNode {
+      pos: root_pos.clone(),
+      zobrist: zobrist_hex(&root_pos),
+      is_or: true,
+      pn: 0,
+      dn: INF,
+      terminal: Some(Term::CheckmateWin),
+      children: Vec::new(),
+      moves: Vec::new(),
+      parent: None,
+    };
+
+    let config = ProofSearchConfig {
+      contributors: Some(vec!["alice".to_string(), "bob".to_string()]),
+      work_units: Some(vec!["work-unit-42".to_string()]),
+      ..ProofSearchConfig::default()
+    };
+    let solver = Solver {
+      arena: vec![root.clone()],
+      side: Color::White,
+      config: &config,
+      tb: None,
+    };
+    let cert = solver.build_certificate("startpos", Color::White);
+    assert_eq!(
+      cert.metadata.contributors,
+      Some(vec!["alice".to_string(), "bob".to_string()])
+    );
+    assert_eq!(
+      cert.metadata.work_units,
+      Some(vec!["work-unit-42".to_string()])
+    );
+
+    let default_config = ProofSearchConfig::default();
+    let solver = Solver {
+      arena: vec![root],
+      side: Color::White,
+      config: &default_config,
+      tb: None,
+    };
+    let cert = solver.build_certificate("startpos", Color::White);
+    assert_eq!(cert.metadata.contributors, None);
+    assert_eq!(cert.metadata.work_units, None);
   }
 }
