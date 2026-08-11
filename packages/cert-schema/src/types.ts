@@ -46,6 +46,12 @@ export interface Certificate {
   metadata: CertificateMetadata;
 }
 
+// An API-response envelope shape only -- the real on-disk signature lives in
+// the .pnbcert wire container's SIG1 block (see docs/CERTIFICATE_FORMAT.md
+// and rust/verifier/src/container.rs), not inside the certificate object
+// itself (a signature inside the hashed JSON would be circular: the hash it
+// signs is computed over the whole object). Nothing in apps/api populates
+// this yet -- signing so far is rust/prover + rust/verifier CLI only.
 export interface CertificateWithSignature extends Certificate {
   signature?: string;
   certificate_sha256?: string;

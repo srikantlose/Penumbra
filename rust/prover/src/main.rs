@@ -7,7 +7,7 @@ use clap::{Parser, Subcommand};
 use penumbra_prover::{ClaimValue, ProofNumberSearch, ProofSearchConfig};
 use shakmaty::Color;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 #[derive(Parser)]
@@ -57,6 +57,20 @@ enum Commands {
       help = "zstd-compress the written certificate (only applies with -o; ignored for stdout)"
     )]
     compress: bool,
+
+    #[arg(
+      long,
+      help = "Path to a raw 32-byte Ed25519 seed (see `penumbra-prove keygen`); signs the written certificate (only applies with -o; ignored for stdout)"
+    )]
+    sign_key: Option<PathBuf>,
+  },
+  /// Generate a new Ed25519 signing keypair for `prove --sign-key`.
+  Keygen {
+    #[arg(
+      long,
+      help = "Writes <prefix>.seed (private, keep secret) and <prefix>.pub (public, safe to share -- this is what `penumbra-verify --trust-key` checks against)"
+    )]
+    out_prefix: PathBuf,
   },
 }
 
@@ -65,7 +79,47 @@ fn main() -> ExitCode {
 
   match cli.command {
     Commands::Prove { .. } => run_prove(cli.command),
+    Commands::Keygen { out_prefix } => run_keygen(&out_prefix),
   }
+}
+
+fn run_keygen(out_prefix: &Path) -> ExitCode {
+  let (seed, public_key) = match penumbra_prover::sign::generate_keypair() {
+    Ok(pair) => pair,
+    Err(e) => {
+      eprintln!("Error: {e}");
+      return ExitCode::FAILURE;
+    }
+  };
+
+  let seed_path = with_extension(out_prefix, "seed");
+  let pub_path = with_extension(out_prefix, "pub");
+
+  if let Err(e) = fs::write(&seed_path, seed) {
+    eprintln!("Error: could not write {}: {e}", seed_path.display());
+    return ExitCode::FAILURE;
+  }
+  if let Err(e) = fs::write(&pub_path, public_key) {
+    eprintln!("Error: could not write {}: {e}", pub_path.display());
+    return ExitCode::FAILURE;
+  }
+
+  eprintln!("Wrote {} (private, keep secret)", seed_path.display());
+  eprintln!(
+    "Wrote {} (public, pass to `penumbra-verify --trust-key`)",
+    pub_path.display()
+  );
+  ExitCode::SUCCESS
+}
+
+fn with_extension(prefix: &Path, ext: &str) -> PathBuf {
+  let mut path = prefix.to_path_buf();
+  let file_name = path
+    .file_name()
+    .map(|n| format!("{}.{ext}", n.to_string_lossy()))
+    .unwrap_or_else(|| format!("key.{ext}"));
+  path.set_file_name(file_name);
+  path
 }
 
 fn run_prove(command: Commands) -> ExitCode {
@@ -78,10 +132,17 @@ fn run_prove(command: Commands) -> ExitCode {
     claim,
     syzygy,
     compress,
-  } = command;
+    sign_key,
+  } = command
+  else {
+    unreachable!("run_prove is only called with Commands::Prove")
+  };
 
   if compress && out.is_none() {
     eprintln!("--compress has no effect without -o; stdout output is always plain JSON");
+  }
+  if sign_key.is_some() && out.is_none() {
+    eprintln!("--sign-key has no effect without -o; stdout output is never signed");
   }
   let claim_side = match side.as_deref() {
     Some("white") => Some(Color::White),
@@ -135,7 +196,21 @@ fn run_prove(command: Commands) -> ExitCode {
   let json = cert.to_json_pretty();
   match out {
     Some(path) => {
-      let bytes = match penumbra_prover::encode_certificate_container(&json, compress) {
+      let signature = match sign_key {
+        Some(key_path) => match sign_certificate(&key_path, &json) {
+          Ok(sig) => Some(sig),
+          Err(e) => {
+            eprintln!("Error: {e}");
+            return ExitCode::FAILURE;
+          }
+        },
+        None => None,
+      };
+      let bytes = match penumbra_prover::encode_certificate_container(
+        &json,
+        compress,
+        signature.as_deref(),
+      ) {
         Ok(bytes) => bytes,
         Err(e) => {
           eprintln!("Error: could not encode certificate: {e}");
@@ -152,4 +227,14 @@ fn run_prove(command: Commands) -> ExitCode {
   }
 
   ExitCode::SUCCESS
+}
+
+/// Reads a raw 32-byte Ed25519 seed from `key_path` and signs `json`'s
+/// `certificate_sha256` with it, returning the raw 64-byte signature.
+fn sign_certificate(key_path: &Path, json: &str) -> Result<Vec<u8>, String> {
+  let seed =
+    fs::read(key_path).map_err(|e| format!("could not read {}: {e}", key_path.display()))?;
+  let sha256 = penumbra_verify::certificate_sha256(json)
+    .map_err(|e| format!("could not hash certificate: {e}"))?;
+  penumbra_prover::sign::sign(&seed, sha256.as_bytes()).map(|sig| sig.to_vec())
 }

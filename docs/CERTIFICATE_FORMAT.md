@@ -169,10 +169,23 @@ Lists external dependencies. Currently only `"syzygy"` is supported (optional if
 
 ```
 [4 bytes magic: "PNBC"]
+[optional 69 bytes: "SIG1" (4) + algorithm id (1) + Ed25519 signature (64)]
 [payload: JSON Certificate (canonical RFC 8785 / JCS), or a zstd frame of it]
 ```
 
-The verifier auto-detects the payload by sniffing zstd's own frame magic (`28 B5 2F FD`) right after `PNBC`: present -> decompress, absent -> read the rest as plaintext JSON. `penumbra-prove` writes the `PNBC`-prefixed plaintext form by default; pass `--compress` to write the zstd form instead. Files with no `PNBC` prefix at all (every certificate produced before this container existed) are read as plain JSON directly — old certificates remain verifiable forever.
+The verifier auto-detects the payload by sniffing zstd's own frame magic (`28 B5 2F FD`) right after `PNBC` (and after the `SIG1` block, if present): present -> decompress, absent -> read the rest as plaintext JSON. `penumbra-prove` writes the `PNBC`-prefixed plaintext form by default; pass `--compress` to write the zstd form instead. Files with no `PNBC` prefix at all (every certificate produced before this container existed) are read as plain JSON directly — old certificates remain verifiable forever. Files with `PNBC` but no `SIG1` (every certificate produced before signing existed) decode with no signature, same as an explicitly unsigned certificate.
+
+### Signing (provenance, not soundness)
+
+A `SIG1` block carries an Ed25519 signature over the certificate's own `certificate_sha256(json)` hex string (UTF-8 encoded) — the same identity value `inspect` displays and the ledger stores, not a separate hash. **The public key never travels with the file.** If it did, anyone could re-sign a tampered certificate with a freshly generated keypair and it would "verify" against itself, proving nothing. Checking a signature always means checking it against a public key the *verifier* was told to trust (`--trust-key <path>`, a raw 32-byte Ed25519 public key), never one read out of the certificate.
+
+This is deliberately a narrower claim than verification itself. Structural and semantic verification (`verify`/`verify_with`) never depend on who produced a certificate — a certificate with no signature at all, or one whose signature isn't checked, is exactly as sound as a signed one, because soundness comes from the proof tree replaying correctly, not from provenance. A signature only answers "did this specific file come from the holder of this specific key," which mainly matters for a `.pnbcert` handed around outside a context (like the Ledger) that already gives tamper-evidence some other way.
+
+CLI surface:
+- `penumbra-prove keygen --out-prefix <path>` — writes `<path>.seed` (private, 32 raw bytes) and `<path>.pub` (public, 32 raw bytes).
+- `penumbra-prove prove ... -o out.pnbcert --sign-key <path>.seed` — signs the written certificate. No effect without `-o` (stdout output is never signed).
+- `penumbra-verify verify cert.pnbcert --trust-key <path>.pub` — checks the signature if present, reports `Signature: valid | INVALID (...) | absent | present (no --trust-key given, not checked)`.
+- `penumbra-verify verify cert.pnbcert --require-signature` — treats "absent" or "not checked" as a failure, not just "INVALID". Off by default, since most certificates (including every one written before this feature existed) have no signature and are still perfectly valid proofs.
 
 ## Identity & integrity
 

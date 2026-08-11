@@ -651,6 +651,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "penumbra-verify",
+ "ring",
  "serde",
  "serde_json",
  "shakmaty",
@@ -665,6 +666,7 @@ name = "penumbra-verify"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "ring",
  "serde",
  "serde_json",
  "sha2",

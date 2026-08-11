@@ -47,10 +47,29 @@ enum Commands {
       help = "Accept tablebase terminals on faith instead of probing (unsound; for inspection only)"
     )]
     assume_tb: bool,
+
+    #[arg(
+      long,
+      help = "Path to a raw 32-byte Ed25519 public key; if the certificate carries a signature, check it against this key"
+    )]
+    trust_key: Option<PathBuf>,
+
+    #[arg(
+      long,
+      default_value_t = false,
+      help = "Fail if the certificate has no signature, or --trust-key wasn't given (provenance, not soundness -- see docs/CERTIFICATE_FORMAT.md)"
+    )]
+    require_signature: bool,
   },
   Inspect {
     #[arg(help = "Path to certificate file (.pnbcert)")]
     cert_path: PathBuf,
+
+    #[arg(
+      long,
+      help = "Path to a raw 32-byte Ed25519 public key to check the certificate's signature against"
+    )]
+    trust_key: Option<PathBuf>,
   },
 }
 
@@ -65,6 +84,8 @@ fn main() -> ExitCode {
       offline,
       structural_only,
       assume_tb,
+      trust_key,
+      require_signature,
     } => {
       let tb = if offline {
         if syzygy.is_some() || tb_endpoint.is_some() || assume_tb {
@@ -89,9 +110,12 @@ fn main() -> ExitCode {
         semantic: !structural_only,
         tb,
       };
-      verify_certificate(&cert_path, &opts)
+      verify_certificate(&cert_path, &opts, trust_key.as_ref(), require_signature)
     }
-    Commands::Inspect { cert_path } => inspect_certificate(&cert_path),
+    Commands::Inspect {
+      cert_path,
+      trust_key,
+    } => inspect_certificate(&cert_path, trust_key.as_ref()),
   };
 
   match result {
@@ -109,20 +133,53 @@ fn main() -> ExitCode {
   }
 }
 
+/// Checks a decoded certificate's signature (if any) against `trust_key`
+/// (if given), returning a human-readable status line and whether that
+/// status should be treated as a failure under `require_signature`.
+fn check_signature(
+  decoded: &penumbra_verify::DecodedCertificate,
+  sha256: &str,
+  trust_key: Option<&PathBuf>,
+  require_signature: bool,
+) -> (String, bool) {
+  match (&decoded.signature, trust_key) {
+    (None, _) => ("absent".to_string(), require_signature),
+    (Some(_), None) => (
+      "present (no --trust-key given, not checked)".to_string(),
+      require_signature,
+    ),
+    (Some(sig), Some(key_path)) => match fs::read(key_path) {
+      Ok(public_key) => match penumbra_verify::sign::verify(&public_key, sha256.as_bytes(), sig) {
+        Ok(()) => ("valid".to_string(), false),
+        Err(e) => (format!("INVALID ({e})"), true),
+      },
+      Err(e) => (
+        format!("<could not read trust key {}: {e}>", key_path.display()),
+        true,
+      ),
+    },
+  }
+}
+
 fn verify_certificate(
   path: &PathBuf,
   opts: &VerifyOptions,
+  trust_key: Option<&PathBuf>,
+  require_signature: bool,
 ) -> Result<bool, Box<dyn std::error::Error>> {
   let bytes = fs::read(path)?;
-  let content = penumbra_verify::decode_certificate_bytes(&bytes)?;
+  let decoded = penumbra_verify::decode_certificate_bytes(&bytes)?;
 
-  let verifier = CertificateVerifier::load_from_json(&content)?;
+  let verifier = CertificateVerifier::load_from_json(&decoded.json)?;
   let report = verifier.verify_with(opts)?;
+  let (signature_status, signature_failed) =
+    check_signature(&decoded, &report.sha256, trust_key, require_signature);
 
   println!("Certificate Verification Report");
   println!("==============================");
-  println!("Valid: {}", report.valid);
+  println!("Valid: {}", report.valid && !signature_failed);
   println!("SHA256: {}", report.sha256);
+  println!("Signature: {}", signature_status);
   println!("Claim: {}", report.claim);
   println!("Nodes: {}", report.node_count);
   println!("Terminals: {}", report.terminal_count);
@@ -150,14 +207,17 @@ fn verify_certificate(
     }
   }
 
-  Ok(report.valid)
+  Ok(report.valid && !signature_failed)
 }
 
-fn inspect_certificate(path: &PathBuf) -> Result<bool, Box<dyn std::error::Error>> {
+fn inspect_certificate(
+  path: &PathBuf,
+  trust_key: Option<&PathBuf>,
+) -> Result<bool, Box<dyn std::error::Error>> {
   let bytes = fs::read(path)?;
-  let content = penumbra_verify::decode_certificate_bytes(&bytes)?;
+  let decoded = penumbra_verify::decode_certificate_bytes(&bytes)?;
 
-  let verifier = CertificateVerifier::load_from_json(&content)?;
+  let verifier = CertificateVerifier::load_from_json(&decoded.json)?;
   let claim = verifier.get_claim();
 
   println!("Certificate Inspection");
@@ -166,8 +226,12 @@ fn inspect_certificate(path: &PathBuf) -> Result<bool, Box<dyn std::error::Error
   println!("Zobrist: {}", claim.zobrist);
   println!("Value: {}", claim.value);
   println!("Side: {}", claim.side);
-  match penumbra_verify::certificate_sha256(&content) {
-    Ok(sha256) => println!("SHA256: {}", sha256),
+  match penumbra_verify::certificate_sha256(&decoded.json) {
+    Ok(sha256) => {
+      println!("SHA256: {}", sha256);
+      let (signature_status, _) = check_signature(&decoded, &sha256, trust_key, false);
+      println!("Signature: {}", signature_status);
+    }
     Err(e) => println!("SHA256: <unavailable: {}>", e),
   }
 

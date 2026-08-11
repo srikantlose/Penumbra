@@ -43,6 +43,21 @@ penumbra-prove prove "kbK5/pp6/1P6/8/8/8/8/R7 w - - 0 1" -o morphy.pnbcert
 penumbra-verify verify morphy.pnbcert
 ```
 
+### Signing (optional, provenance only)
+
+`penumbra-prove keygen --out-prefix mykey` writes `mykey.seed` (private) and
+`mykey.pub` (public). Pass `--sign-key mykey.seed` to `prove -o` to sign the
+written certificate; `penumbra-verify verify cert.pnbcert --trust-key mykey.pub`
+then checks it. This is provenance ("did this file come from this key"), not
+soundness -- an unsigned certificate is just as valid a proof as a signed one.
+See [`CERTIFICATE_FORMAT.md`](../../docs/CERTIFICATE_FORMAT.md#signing-provenance-not-soundness).
+
+```sh
+penumbra-prove keygen --out-prefix mykey
+penumbra-prove prove "kbK5/pp6/1P6/8/8/8/8/R7 w - - 0 1" -o morphy.pnbcert --sign-key mykey.seed
+penumbra-verify verify morphy.pnbcert --trust-key mykey.pub
+```
+
 ## Examples
 
 Ready-made certificates live in [`examples/`](examples): a back-rank mate-in-one,

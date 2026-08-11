@@ -23,6 +23,11 @@ shakmaty = "0.26"
 shakmaty-syzygy = "0.24"
 clap = { version = "4.4", features = ["derive"] }
 zstd = "0.13"
-
-[dev-dependencies]
+ring = "0.17"
+# Not for verification logic (the prover and verifier stay independent
+# there) -- only for certificate_sha256, so a signed certificate is signed
+# over exactly the same canonicalization the verifier will recompute later.
+# Reimplementing that canonicalization a second time by hand would risk the
+# two silently drifting apart, which would be a far worse bug than this
+# dependency edge.
 penumbra-verify = { path = "../verifier" }

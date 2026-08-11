@@ -92,8 +92,8 @@ fn compressed_container_survives_the_full_pipeline() {
     .expect("proved search yields a certificate");
   let json = cert.to_json_pretty();
 
-  let bytes =
-    penumbra_prover::encode_certificate_container(&json, true).expect("encodes to zstd container");
+  let bytes = penumbra_prover::encode_certificate_container(&json, true, None)
+    .expect("encodes to zstd container");
   assert!(bytes.starts_with(b"PNBC"));
   assert_ne!(
     bytes[4..],
@@ -103,9 +103,65 @@ fn compressed_container_survives_the_full_pipeline() {
 
   let decoded =
     penumbra_verify::decode_certificate_bytes(&bytes).expect("decodes the container back to JSON");
-  assert_eq!(decoded, json);
+  assert_eq!(decoded.json, json);
+  assert!(decoded.signature.is_none());
 
-  let verifier = CertificateVerifier::load_from_json(&decoded).expect("cert loads");
+  let verifier = CertificateVerifier::load_from_json(&decoded.json).expect("cert loads");
   let report = verifier.verify().expect("verification runs");
   assert!(report.valid, "errors: {:?}", report.errors);
+}
+
+#[test]
+fn signed_certificate_survives_the_full_pipeline() {
+  // Prove a certificate, sign it exactly as `penumbra-prove -o ... --sign-key`
+  // would, then check it exactly as `penumbra-verify --trust-key` would --
+  // both against the real signing key and against an unrelated one.
+  let search = ProofNumberSearch::new(ProofSearchConfig::default());
+  let outcome = search
+    .prove("6k1/5ppp/8/8/8/8/8/R6K w - - 0 1", Some(Color::White))
+    .expect("position parses");
+  let cert = outcome
+    .certificate
+    .expect("proved search yields a certificate");
+  let json = cert.to_json_pretty();
+
+  let (seed, public_key) = penumbra_prover::sign::generate_keypair().expect("generates a keypair");
+  let sha256 = penumbra_verify::certificate_sha256(&json).expect("hashes the certificate");
+  let signature =
+    penumbra_prover::sign::sign(&seed, sha256.as_bytes()).expect("signs the certificate");
+
+  let bytes = penumbra_prover::encode_certificate_container(&json, false, Some(&signature))
+    .expect("encodes a signed container");
+
+  let decoded = penumbra_verify::decode_certificate_bytes(&bytes).expect("decodes the container");
+  assert_eq!(decoded.json, json);
+  let carried_signature = decoded
+    .signature
+    .expect("signature carried through the container");
+
+  let verifier = CertificateVerifier::load_from_json(&decoded.json).expect("cert loads");
+  let report = verifier.verify().expect("verification runs");
+  assert!(report.valid, "errors: {:?}", report.errors);
+  assert_eq!(
+    report.sha256, sha256,
+    "signed message must match the report's own sha256"
+  );
+
+  assert!(
+    penumbra_verify::sign::verify(&public_key, report.sha256.as_bytes(), &carried_signature)
+      .is_ok(),
+    "signature must verify against the real signing key"
+  );
+
+  let (_other_seed, other_public_key) =
+    penumbra_prover::sign::generate_keypair().expect("generates an unrelated keypair");
+  assert!(
+    penumbra_verify::sign::verify(
+      &other_public_key,
+      report.sha256.as_bytes(),
+      &carried_signature
+    )
+    .is_err(),
+    "signature must not verify against an unrelated key"
+  );
 }
