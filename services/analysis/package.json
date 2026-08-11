@@ -19,7 +19,8 @@
     "repro-test": "node dist/scripts/repro-test.js",
     "repro-test:canonical": "node dist/scripts/repro-test.js --tier canonical",
     "build-calibration-corpus": "node dist/scripts/build-calibration-corpus.js",
-    "run-calibration": "node dist/scripts/run-calibration.js"
+    "run-calibration": "node dist/scripts/run-calibration.js",
+    "generate-fleet-work-units": "node dist/scripts/generate-fleet-work-units.js"
   },
   "dependencies": {
     "@penumbra/cert-schema": "workspace:*",
