@@ -27,7 +27,6 @@ export const fogReadySchema = z.object({
   score: z.number(),
   components: fogComponentsSchema,
   percentile: z.number().nullable(),
-  percentile_provisional: z.literal(true),
   status: truthStatusSchema,
   fingerprint: z.string(),
 });
@@ -89,7 +88,7 @@ export const positionResponseSchema = z.object({
     createdAt: z.string(),
   }),
   truthStatus: truthStatusSchema,
-  fog: fogReadySchema.omit({ percentile_provisional: true }).extend({ percentileProvisional: z.literal(true) }).nullable(),
+  fog: fogReadySchema.nullable(),
   evals: z.array(evalEntrySchema),
   proofRefs: z.array(proofRefSchema),
 });
@@ -196,7 +195,7 @@ export const methodologyResponseSchema = z.object({
     canonical: z.string(),
   }),
   calibration: z.object({
-    corpus: z.literal('provisional-placeholder'),
+    corpus: z.string(),
     corpusSize: z.number(),
     formulaVersion: z.string(),
   }),

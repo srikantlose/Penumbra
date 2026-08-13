@@ -878,35 +878,53 @@ still valid, exit 0; `--require-signature` against a genuinely unsigned legacy e
 exit 1. 65 total workspace tests passing, `cargo clippy --workspace --all-targets` clean,
 `cargo fmt --all -- --check` clean, CI green.
 
-### 🟡 Real calibration run (started 2026-08-11, in progress)
+### ✅ Real calibration run (started 2026-08-11, done 2026-08-13)
 
-The methodology doc's placeholder `FOG_CALIBRATION_V0_1` table (`percentile_provisional: true`
-everywhere it's served) is still in place — this is the backfill. New tooling:
-`services/analysis/src/scripts/build-calibration-corpus.ts` (real games from four verifiably-elite
-Lichess accounts, plies 10–80, deduped by EPD) and `run-calibration.ts` (resumable: checks
-`fog_scores` before spending engine time on a position, one dedicated DB connection per concurrent
-worker rather than sharing a single `pg.Client`, which node-postgres serializes and warns about
-under concurrent use).
+Replaced the methodology doc's placeholder `FOG_CALIBRATION_V0_1` table
+(`percentile_provisional: true` everywhere it was served) with real computed percentiles. New
+tooling: `services/analysis/src/scripts/build-calibration-corpus.ts` (real games from four
+verifiably-elite Lichess accounts, plies 10–80, deduped by EPD) and `run-calibration.ts`
+(resumable: checks `fog_scores` before spending engine time on a position, one dedicated DB
+connection per concurrent worker rather than sharing a single `pg.Client`, which node-postgres
+serializes and warns about under concurrent use).
 
 Real measurement corrected a naive roadmap assumption before committing the machine to it: a
 12-position canonical-tier pilot at concurrency=12 measured only ~4.4× effective throughput (not
 12×) from hyperthreaded concurrency on this 6-physical/12-logical-core machine — the full 100k
-corpus would take **~23.6 days**, not the roadmap's original ~9-day estimate. Scoped down to a real
-8,000-position batch first (~31–46h), currently running in the background at canonical tier,
-concurrency=12.
+corpus would take ~23.6 days, not the roadmap's original ~9-day estimate. Scoped down to a real
+8,000-position batch instead.
 
 `build-calibration-corpus.ts` originally let a handful of already-checkmated final positions (no
 legal moves → Stockfish reports `bestmove (none)` with no WDL, correctly treated as a failure) leak
 into the corpus from games that end within the ply 10-80 window. Traced via a direct repro against
 the pinned Stockfish binary, then fixed by filtering on chessops' `hasDests()` at corpus-build time.
-The currently-running batch predates the fix (steady ~0.7% failure rate, caught per-item and
-skipped — not fatal, not corrupting the percentile computation), but future corpus builds
-(including the eventual full 100k run) won't have this gap.
+This particular batch predates the fix (steady ~0.7-0.8% failure rate, caught per-item and
+skipped — not fatal, not corrupting the percentile computation), but future corpus builds won't
+have this gap.
 
-**Next:** once this batch completes, `run-calibration.js report` computes real percentiles from
-whatever's scored, to replace `FOG_CALIBRATION_V0_1` and drop the provisional labels — not done
-yet. Remaining Phase 2 backlog after that: the full 100k corpus, and Fleet work-unit federation
-(`docs/ROADMAP.md` Deferred section).
+The batch ran across ~2 days and survived two real interruptions without losing any progress
+(resumable-by-design paid off): a Windows-forced reboot that killed every engine subprocess
+mid-search partway through (Postgres's own WAL crash recovery replayed cleanly on restart — real
+row counts confirmed via `COUNT(*)`, not just the stats-collector estimates that reset to zero
+after an unclean shutdown; `scripts/backup-calibration.ps1` + an hourly Windows scheduled task
+were added the same day as a second line of defense, and `infra/docker-compose.yml` gained
+`restart: unless-stopped` on all three services so a reboot doesn't require manually bringing
+Docker back up), and a deliberate concurrency throttle (12 → 6 → 12, back and forth a few times)
+while the machine was needed for other work.
+
+**Final result: 7,938/8,000 scored, 62 failed** (the known unanalyzable-position gap above —
+harmless, not a new issue). `run-calibration.js report` computed real percentiles:
+
+| Percentile | 1st | 5th | 10th | 25th | 50th | 75th | 90th | 95th | 99th |
+|---|---|---|---|---|---|---|---|---|---|
+| Score | 20 | 24 | 28 | 37 | 46 | 50 | 57 | 62 | 71 |
+
+`packages/fog/src/calibration.ts`'s `FOG_CALIBRATION_V0_1` now holds these; `percentile_provisional`
+is gone from `apps/api`'s fog/positions schemas and routes, and from every web label
+(`apps/web`'s home page, methodology page, `FogIndexCard`) — a single formula-version-scoped
+change touching both stacks in one pass, exactly as originally planned when the flag was added.
+Remaining Phase 2 backlog: the full 100k corpus (not committed to, just a possible future
+expansion) — Fleet work-unit federation is already done (below).
 
 ### ✅ Fleet work-unit federation v1 (2026-08-12)
 

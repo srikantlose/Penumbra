@@ -16,11 +16,6 @@ export function FogIndexCard({ score, components, percentile }: FogIndexCardProp
           <span className="font-data-mono text-data-mono text-white">· p{percentile}</span>
         ) : null}
       </div>
-      {percentile !== undefined && percentile !== null ? (
-        <p className="font-data-mono text-[10px] text-white uppercase mt-1">
-          Percentiles are provisional pending the 100k-corpus calibration.
-        </p>
-      ) : null}
       <div className="mt-4 pt-4 border-t-[2px] border-white flex flex-col gap-2 font-data-mono text-data-mono uppercase text-white">
         {components.map((c) => (
           <div key={c.label} className="flex justify-between gap-2">

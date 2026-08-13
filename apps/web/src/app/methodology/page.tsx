@@ -29,8 +29,8 @@ const COMPONENTS = [
 ];
 
 const PERCENTILES = [
-  ['1st', 5], ['5th', 12], ['10th', 18], ['25th', 30],
-  ['50th (median)', 45], ['75th', 62], ['90th', 78], ['95th', 87], ['99th', 94],
+  ['1st', 20], ['5th', 24], ['10th', 28], ['25th', 37],
+  ['50th (median)', 46], ['75th', 50], ['90th', 57], ['95th', 62], ['99th', 71],
 ] as const;
 
 export default async function MethodologyPage() {
@@ -105,10 +105,7 @@ export default async function MethodologyPage() {
         <div className="p-4 border-b-[2px] border-white flex flex-col gap-1">
           <span className="font-label-caps text-label-caps text-white uppercase">
             Calibration CDF — {methodology.calibration.corpusSize.toLocaleString()} position corpus
-            (Lichess elite, plies 10–80)
-          </span>
-          <span className="font-data-mono text-[10px] text-white uppercase">
-            Percentiles are provisional pending the 100k-corpus calibration.
+            (elite Lichess accounts, plies 10–80)
           </span>
         </div>
         <div className="p-4 overflow-x-auto">

@@ -134,35 +134,41 @@ Weights calibrated on training corpus to balance signals; revised per formula ve
 
 ## Calibration and percentiles
 
-> **Calibration status (2026-07-11): PROVISIONAL.** The CDF below is a
-> placeholder, not the output of a real calibration run against the corpus
-> described. It ships this way for launch deliberately (2026-07-08 decision)
-> rather than blocking launch on a 100k-position batch job. Every API
-> response carrying a calibration-derived percentile marks it
-> `percentile_provisional: true` (`apps/api`'s fog and positions routes; the
-> BFF's own stats use a plain statistical median, not this CDF, so they
-> carry no such field), and the web app surfaces the same label next to
-> every percentile it renders (`FogIndexCard`). The real
-> 100k-corpus calibration run is planned as a post-launch background job;
-> once it completes, this table gets replaced with real percentiles and the
-> provisional flag comes off everywhere at once (a single formula-version-scoped
-> change, not a per-route migration, since every consumer already reads the
-> flag rather than assuming a percentile is final).
+> **Calibration status (2026-08-13): REAL.** The CDF below comes from an
+> actual calibration run, replacing the launch-time placeholder that shipped
+> under this same heading from 2026-07-11 to 2026-08-13. The placeholder was
+> a deliberate launch decision (2026-07-08) rather than blocking launch on
+> the batch job; every API response carrying a calibration-derived
+> percentile marked it `percentile_provisional: true` for that whole window
+> (`apps/api`'s fog and positions routes; the web app surfaced the same
+> label next to every percentile it rendered). That flag has now been
+> removed everywhere — response shape, web copy, and this doc all changed in
+> one pass, since every consumer already read the flag rather than assuming
+> a percentile was final. If a larger corpus run happens later (e.g. the
+> 100k-position batch originally scoped), this table gets replaced again the
+> same way.
 
-**Corpus:** 100,000 positions from Lichess elite database (plies 10–80, 2015–2025).
+**Corpus:** 7,938 of 8,000 attempted positions (canonical tier), from four
+verifiably-elite (super-GM, 2700+) Lichess accounts, plies 10–80 — see
+`services/analysis/src/scripts/build-calibration-corpus.ts` for the exact
+roster and its rationale (a deliberate substitution for the third-party
+"Lichess elite database" PGN dump this section originally named, which isn't
+something this repo fetches). The remaining 62 positions were skipped as
+unanalyzable: checkmate/near-terminal positions with no legal moves for the
+engine to evaluate.
 
 **CDF (v0.1):**
 | Percentile | Score |
 |---|---|
-| 1st | 5 |
-| 5th | 12 |
-| 10th | 18 |
-| 25th | 30 |
-| 50th (median) | 45 |
-| 75th | 62 |
-| 90th | 78 |
-| 95th | 87 |
-| 99th | 94 |
+| 1st | 20 |
+| 5th | 24 |
+| 10th | 28 |
+| 25th | 37 |
+| 50th (median) | 46 |
+| 75th | 50 |
+| 90th | 57 |
+| 95th | 62 |
+| 99th | 71 |
 
 **QA Set:** ~200 hand-curated positions with expected fog bands:
 - Famous fortresses (known engine-fail positions): high fog (80–100).

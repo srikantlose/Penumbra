@@ -65,25 +65,30 @@ export class FogCalibration {
   }
 }
 
+// Computed 2026-08-13 from a real calibration run: 7,938 of 8,000 positions
+// scored at canonical tier (four verifiably-elite Lichess accounts, plies
+// 10-80; 62 skipped as unanalyzable -- checkmate/near-terminal positions
+// with no legal moves). Replaces the launch-time placeholder CDF (see the
+// Decision log in docs/ROADMAP.md and docs/FOG_INDEX_METHODOLOGY.md).
 export const FOG_CALIBRATION_V0_1: CalibrationData = {
   formulaVersion: '0.1',
-  corpusSize: 100000,
-  minScore: 0,
+  corpusSize: 7938,
+  minScore: 2,
   maxScore: 100,
-  mean: 45.3,
-  stdDev: 24.8,
+  mean: 44.2,
+  stdDev: 11.3,
   percentiles: {
-    '0.1': 0,
-    '1': 5,
-    '5': 12,
-    '10': 18,
-    '25': 30,
-    '50': 45,
-    '75': 62,
-    '90': 78,
-    '95': 87,
-    '99': 94,
-    '99.9': 99,
+    '0.1': 10,
+    '1': 20,
+    '5': 24,
+    '10': 28,
+    '25': 37,
+    '50': 46,
+    '75': 50,
+    '90': 57,
+    '95': 62,
+    '99': 71,
+    '99.9': 94,
   },
 };
 

@@ -105,7 +105,6 @@ export async function registerPositionsRoutes(fastify: FastifyInstance, context:
               score: fogRow.score,
               components: fogRow.components as FogComponents,
               percentile: fogRow.percentile,
-              percentileProvisional: true as const,
               status: truthStatus,
               fingerprint: fogRow.engineFingerprint,
             }

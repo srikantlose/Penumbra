@@ -1402,24 +1402,29 @@ accounts; a crates.io token) rather than on any remaining decision or code.
 
 ## Deferred / post-launch
 
-- **Real calibration run — in progress (started 2026-08-11).** The original "~9 days at 12×
-  parallel" estimate above was naive extrapolation and turned out wrong: a real 12-position
-  canonical-tier pilot at concurrency=12 measured ~4.4× effective throughput (not 12×) on this
-  machine's 6-physical/12-logical-core CPU under real hyperthreading contention, meaning the full
-  100k corpus would actually take **~23.6 days** serial-equivalent, not ~9. Rather than commit to
-  that unattended, a smaller real batch was run first: `services/analysis/src/scripts/
-  build-calibration-corpus.ts` (real games from four verifiably-elite Lichess accounts, plies
-  10–80, deduped by EPD) and `run-calibration.ts` (resumable — checks `fog_scores` before spending
-  engine time, per-worker DB connections to avoid serializing on one `pg.Client`) are new tooling
-  built this session. Currently running an 8,000-position batch at canonical tier,
-  concurrency=12, ETA ~31–46h. `build-calibration-corpus.ts` originally let a handful of
-  already-checkmated final positions (no legal moves, so Stockfish reports `bestmove (none)` with
-  no WDL) leak into the corpus — fixed by filtering on `hasDests()` at corpus-build time; the
-  currently-running batch predates the fix (steady ~0.7% failure rate, caught per-item and
-  skipped, not fatal) but future corpus builds won't have this. Once this batch completes, `run-
-  calibration.js report` computes real percentiles from whatever's scored; replacing
-  `FOG_CALIBRATION_V0_1` and dropping the provisional labels is a follow-on step, not done yet.
-  The full 100k corpus remains deferred pending this batch's results.
+- ~~**Real calibration run**~~ **Done 2026-08-13.** The original "~9 days at 12× parallel"
+  estimate was naive extrapolation and turned out wrong: a real 12-position canonical-tier pilot
+  at concurrency=12 measured ~4.4× effective throughput (not 12×) on this machine's
+  6-physical/12-logical-core CPU under real hyperthreading contention, meaning the full 100k
+  corpus would actually take ~23.6 days serial-equivalent. Rather than commit to that unattended,
+  a smaller real batch ran instead: `services/analysis/src/scripts/build-calibration-corpus.ts`
+  (real games from four verifiably-elite Lichess accounts, plies 10–80, deduped by EPD) and
+  `run-calibration.ts` (resumable — checks `fog_scores` before spending engine time, per-worker DB
+  connections to avoid serializing on one `pg.Client`). The 8,000-position batch ran across
+  ~2 days (started 2026-08-11), interrupted twice — once by a Windows-forced reboot that killed
+  every engine subprocess mid-search (Postgres's own WAL recovery replayed cleanly, no data lost;
+  see `scripts/backup-calibration.ps1`, added the same day as a second line of defense), once by
+  a deliberate concurrency throttle down to 50% and back while the machine was needed for other
+  work — both times resumed cleanly from whatever was already in `fog_scores`, no reruns needed.
+  Finished at **7,938/8,000 scored (62 failed)**: the 62 are the known unanalyzable
+  checkmate/near-terminal positions (no legal moves for the engine to evaluate — `hasDests()`
+  filtering was added to the corpus builder mid-flight but this batch predates it, so they still
+  appear in the corpus and fail every run, harmlessly). `run-calibration.js report` computed real
+  percentiles from the result; `FOG_CALIBRATION_V0_1` (`packages/fog/src/calibration.ts`) now
+  holds them, and `percentile_provisional` has been removed from every API response and web label
+  (`apps/api`'s fog/positions routes and schemas, `apps/web`'s methodology/home pages and
+  `FogIndexCard`) — see `docs/FOG_INDEX_METHODOLOGY.md`'s Calibration status box for the full
+  before/after. The full 100k corpus remains a possible future expansion, not committed to.
 - ~~**Lichess OAuth (PKCE, no app registration)**~~ **Done 2026-07-16.** "Connect account" flow
   shipped: `services/analysis/src/import/lichessOAuth.ts` (PKCE + the lichess.org token/account
   calls), two new BFF routes (`/bff/lichess/oauth/start` + `/callback`, pending-state in Redis,

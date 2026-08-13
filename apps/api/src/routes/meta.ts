@@ -29,7 +29,7 @@ export async function registerMetaRoutes(fastify: FastifyInstance, _context: Api
         canonical: computeFingerprintForTier('canonical'),
       },
       calibration: {
-        corpus: 'provisional-placeholder' as const,
+        corpus: 'lichess-elite-canonical-v1',
         corpusSize: FOG_CALIBRATION_V0_1.corpusSize,
         formulaVersion: FOG_CALIBRATION_V0_1.formulaVersion,
       },

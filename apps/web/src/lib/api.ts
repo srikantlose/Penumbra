@@ -21,7 +21,6 @@ export interface FogReady {
   score: number;
   components: FogComponents;
   percentile: number | null;
-  percentile_provisional: true;
   fingerprint: string;
 }
 
@@ -62,7 +61,7 @@ export interface PositionDetail {
   pieceCount: number;
   provenance: { firstSeenGameId: number | null; occurrenceCount: number; createdAt: string };
   truthStatus: TruthStatus;
-  fog: (Omit<FogReady, 'percentile_provisional'> & { percentileProvisional: true }) | null;
+  fog: FogReady | null;
   evals: EvalEntry[];
   proofRefs: ProofRef[];
 }
@@ -103,7 +102,7 @@ export interface Methodology {
     lc0: { version: string; network: string; backend: string; nodes: number };
   };
   fingerprints: { quick: string; canonical: string };
-  calibration: { corpus: 'provisional-placeholder'; corpusSize: number; formulaVersion: string };
+  calibration: { corpus: string; corpusSize: number; formulaVersion: string };
 }
 
 export interface BffStats {

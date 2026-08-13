@@ -59,8 +59,7 @@ export default async function HomePage() {
             </div>
           </div>
           <p className="font-data-mono text-data-mono text-white text-sm uppercase">
-            Median Fog Index across every scored position. Percentiles are provisional pending the
-            100k-corpus calibration.
+            Median Fog Index across every scored position.
           </p>
         </div>
       </section>

@@ -99,7 +99,6 @@ export async function registerFogRoutes(fastify: FastifyInstance, context: ApiCo
           score: result.score,
           components: result.components,
           percentile: result.percentile,
-          percentile_provisional: true as const,
           status: result.status,
           fingerprint: result.fingerprint,
         };
@@ -128,7 +127,6 @@ export async function registerFogRoutes(fastify: FastifyInstance, context: ApiCo
               score: result.score,
               components: result.components,
               percentile: result.percentile,
-              percentile_provisional: true as const,
               status: result.status,
               fingerprint: result.fingerprint,
             };
